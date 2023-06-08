@@ -1,48 +1,76 @@
+import { useState, useEffect } from 'react';
 import React from 'react';
-import axios from 'axios';
-import AWS from 'aws-sdk';
+
+import { handleFileAWS } from '@/lib/aws';
+import { createFileSupabase, handlePageSupabase } from '@/lib/supabase';
 
 export default function Home() {
 
+    const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
+
+    const [uploadStageAWS, setUploadStageAWS] = useState(null);
+    const [uploadProgressAWS, setUploadProgressAWS] = useState(0);
+
+    const [supabaseId, setSupabaseId] = useState(null); 
+    const [uploadStageSupabase, setUploadStageSupabase] = useState(null);
+    const [uploadProgressSupabase, setUploadProgressSupabase] = useState(0);
+
+    useEffect(() => {
+        setUploadStageAWS(null);
+        setUploadProgressAWS(0);
+        setUploadStageSupabase(null);
+        setUploadProgressSupabase(0);
+    }, [appStage]);
+
     const handleFileChange = (e) => {
         const file = e.target.files[0];
-        handleFile(file);
+        setAppStage('processing');
+        handleFileAWS(
+            file, 
+            setUploadStageAWS, 
+            setUploadProgressAWS,
+            createFileSupabase,
+            handlePageSupabase,
+            setUploadStageSupabase,
+            setUploadProgressSupabase,
+            supabaseId,
+            setSupabaseId
+        );
+        setAppStage('chat');
     };
 
     const handleFileDrop = (e) => {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
-        handleFile(file);
+        setAppStage('processing');
+        handleFileAWS(
+            file, 
+            setUploadStageAWS, 
+            setUploadProgressAWS,
+            createFileSupabase,
+            handlePageSupabase,
+            setUploadStageSupabase,
+            setUploadProgressSupabase,
+            supabaseId,
+            setSupabaseId
+        );
+        setAppStage('chat');
     };
 
-    const handleFile = (file) => {
-        if (file.type !== 'application/pdf') {
-            alert('Please upload a PDF file.');
-            return;
-        }
-
-        // Configure AWS S3
-        AWS.config.update({
-            region: process.env.NEXT_PUBLIC_S3_REGION,
-            accessKeyId: process.env.NEXT_PUBLIC_S3_ACCESS_KEY_ID,
-            secretAccessKey: process.env.NEXT_PUBLIC_S3_SECRET_ACCESS_KEY
-        });
-
-        const s3 = new AWS.S3();
-        const params = {
-            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET,
-            Key: file.name,
-            Body: file
-        };
-
-        s3.upload(params, (err, data) => {
-            if (err) {
-                console.error(err);
-                return;
-            }
-
-            console.log(data);
-        });
+    const handleTestingButtonClick = () => {
+        setAppStage('processing');
+        handleFileAWS(
+            null, 
+            setUploadStageAWS, 
+            setUploadProgressAWS,
+            createFileSupabase,
+            handlePageSupabase,
+            setUploadStageSupabase,
+            setUploadProgressSupabase,
+            supabaseId,
+            setSupabaseId
+        );
+        setAppStage('chat');
     };
 
     return (
@@ -65,10 +93,34 @@ export default function Home() {
                         <svg className="w-8 h-8" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                             <path d="M17 10h-4V0H7v10H3l7 7 7-7z" />
                         </svg>
-                        <span className="mt-2 text-base leading-normal">Upload Records</span>
+                        <span className="mt-2 text-base leading-normal">Upload Record</span>
                         <input type='file' className="hidden" onChange={handleFileChange} />
                     </label>
                 </div>
+                <button onClick={handleTestingButtonClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
+                    Run LLM Processing with Pre-Processed Textract Record
+                </button>
+                {uploadStageAWS && (
+                    <div className="flex flex-col items-center justify-center mt-6">
+                        <p className="text-2xl text-gray-900 dark:text-white">
+                            {uploadStageAWS} {uploadProgressAWS !== 0 && ` - ${uploadProgressAWS}%`} 
+                        </p>
+                    </div>
+                )}
+                {uploadStageSupabase && (
+                    <div className="flex flex-col items-center justify-center mt-6">
+                        <p className="text-2xl text-gray-900 dark:text-white">
+                            {uploadStageSupabase} {uploadProgressSupabase !== 0 && ` - ${uploadProgressSupabase}%`} 
+                        </p>
+                    </div>
+                )}
+                {supabaseId && (
+                    <div className="flex flex-col items-center justify-center mt-6">
+                        <p className="text-2xl text-gray-900 dark:text-white">
+                            Supabase ID: {supabaseId} 
+                        </p>
+                    </div>
+                )}
             </main>
         </div>
     )
