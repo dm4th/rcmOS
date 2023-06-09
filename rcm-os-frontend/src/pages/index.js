@@ -33,7 +33,6 @@ export default function Home() {
             handlePageSupabase,
             setUploadStageSupabase,
             setUploadProgressSupabase,
-            supabaseId,
             setSupabaseId
         );
         setAppStage('chat');
@@ -51,7 +50,6 @@ export default function Home() {
             handlePageSupabase,
             setUploadStageSupabase,
             setUploadProgressSupabase,
-            supabaseId,
             setSupabaseId
         );
         setAppStage('chat');
@@ -67,7 +65,6 @@ export default function Home() {
             handlePageSupabase,
             setUploadStageSupabase,
             setUploadProgressSupabase,
-            supabaseId,
             setSupabaseId
         );
         setAppStage('chat');

@@ -9,7 +9,6 @@ export const handleFileAWS = async (
     handlePageSupabase, 
     setUploadStageSupabase, 
     setUploadProgressSupabase,
-    supabaseId,
     setSupabaseId
 ) => {
     // If there's no file sent to the function, we are testing and will use a local file
@@ -64,7 +63,7 @@ export const handleFileAWS = async (
         jobId = JSON.parse(textractRes.data.body).JobId;    // TODO: turn into const once testing code is removed
         console.log(`Textract Job ID: ${jobId}`);
     }
-    createFileSupabase(jobId, setUploadStageSupabase, setUploadProgressSupabase, setSupabaseId);
+    const recordId = await createFileSupabase(jobId, setUploadStageSupabase, setUploadProgressSupabase, setSupabaseId);
 
 
     // Poll Textract Job Status
@@ -115,7 +114,8 @@ export const handleFileAWS = async (
                 const { completedPages, leftoverBlocks } = handlePageAWS(oldBlocks, newBlocks);
                 oldBlocks = leftoverBlocks;
                 for (let i = 0; i < completedPages.length; i++) {
-                    handlePageSupabase(completedPages[i], supabaseId, setUploadStageSupabase, setUploadProgressSupabase, totalPages);
+                    console.log(`Passing to supabase with ID ${recordId}`)
+                    handlePageSupabase(completedPages[i], recordId, setUploadStageSupabase, setUploadProgressSupabase, totalPages);
                 }
         
                 // Update Progress and track Next Token
@@ -125,7 +125,7 @@ export const handleFileAWS = async (
             }
 
             // Handle any leftover blocks
-            handlePageSupabase(oldBlocks, supabaseId, setUploadStageSupabase, setUploadProgressSupabase, totalPages);
+            handlePageSupabase(oldBlocks, recordId, setUploadStageSupabase, setUploadProgressSupabase, totalPages);
         
             console.log('Textract Results Retrieved');
             setUploadStage('Textract Results Retrieved');
