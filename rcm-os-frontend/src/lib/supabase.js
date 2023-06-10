@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const createFileSupabase = async (jobId, setUploadStage, setUploadProgress, setSupabaseId) => {
+export const createFileSupabase = async (jobId, file, setUploadStage, setUploadProgress, setSupabaseId) => {
     setUploadStage('Creating Document Record in Supabase');
     setUploadProgress(0);
     const supabase = createClient(
@@ -8,9 +8,11 @@ export const createFileSupabase = async (jobId, setUploadStage, setUploadProgres
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
 
-    // check if a record with this jobId already exists in the medical_recoreds table
+    // check if a record with this jobId already exists in the medical_records table
     // if so, set the id using setSupabaseId and return
-    // else create a new record and set the id using setSupabaseId
+    // else: 
+        // 1. upload the file to supabase storage 
+        // 2. create a new record and set the id using setSupabaseId
     const { data, error } = await supabase
         .from('medical_records')
         .select('id')
@@ -24,6 +26,8 @@ export const createFileSupabase = async (jobId, setUploadStage, setUploadProgres
         setSupabaseId(data[0].id);
         return data[0].id;
     }
+
+    // TODO: upload file to supabase storage
 
     const { data: insertData, error: insertError } = await supabase
         .from('medical_records')

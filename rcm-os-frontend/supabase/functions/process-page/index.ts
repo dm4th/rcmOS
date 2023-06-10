@@ -52,7 +52,7 @@ async function handler(req: Request) {
         // Loop over the page markdown and generate a summary and title for each section using the LLM
         const pageSections = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
-            const sectionPrompt = pageSectionSummaryTemplate(pageNumber, i, pageMarkdownArray[i]);
+            const sectionPrompt = pageSectionSummaryTemplate(pageNumber, i, pageMarkdownArray[i].text);
 
             // Create LLM Chain
             const sectionChain = new LLMChain({
@@ -74,10 +74,6 @@ async function handler(req: Request) {
         // loop over the page sections, embed the summary and write to the database
         const insertRows = [];
         for (let i = 0; i < pageSections.length; i++) {
-            // pull the title and summary from the section output
-            const title = pageSections[i].split("TITLE:")[1].split("SUMMARY:")[0].trim();
-            const summary = pageSections[i].split("SUMMARY:")[1].trim();
-
             // Generate embedding for the page section summary
             const embeddingUrl = "https://api.openai.com/v1/embeddings";
             const embeddingHeaders = {
@@ -86,7 +82,7 @@ async function handler(req: Request) {
             };
 
             const embeddingBody = JSON.stringify({
-                "input": summary,
+                "input": pageSections[i],
                 "model": "text-embedding-ada-002",
             });
 
@@ -97,6 +93,11 @@ async function handler(req: Request) {
             });
             const embeddingJson = await embeddingResponse.json();
             const summaryEmbedding = embeddingJson.data[0].embedding;
+
+            // Generate the title and summary
+            const title = pageSections[i].split("TITLE:")[1].split("SUMMARY:")[0].trim();
+            const summary = pageSections[i].split("SUMMARY:")[1].trim();
+
             insertRows.push({
                 "record_id": recordId,
                 "page_number": pageNumber,
@@ -104,6 +105,10 @@ async function handler(req: Request) {
                 "title": title,
                 "summary": summary,
                 "summary_embedding": summaryEmbedding,
+                "left": pageMarkdownArray[i].left,
+                "top": pageMarkdownArray[i].top,
+                "right": pageMarkdownArray[i].right,
+                "bottom": pageMarkdownArray[i].bottom,
             });
         }
 

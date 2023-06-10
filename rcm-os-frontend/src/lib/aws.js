@@ -63,7 +63,7 @@ export const handleFileAWS = async (
         jobId = JSON.parse(textractRes.data.body).JobId;    // TODO: turn into const once testing code is removed
         console.log(`Textract Job ID: ${jobId}`);
     }
-    const recordId = await createFileSupabase(jobId, setUploadStageSupabase, setUploadProgressSupabase, setSupabaseId);
+    const recordId = await createFileSupabase(jobId, file, setUploadStageSupabase, setUploadProgressSupabase, setSupabaseId);
 
 
     // Poll Textract Job Status

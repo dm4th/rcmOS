@@ -38,10 +38,13 @@ CREATE TABLE "public"."page_summaries" (
     "record_id" "uuid" NOT NULL,
     "page_number" "int4" NOT NULL,
     "section_number" "int4" NOT NULL,
-    "text_representation" "text" NOT NULL,
     "title" "text" NOT NULL,
     "summary" "text" NOT NULL,
     "summary_embedding" "public"."vector" NOT NULL,
+    "left" "float4" NOT NULL,
+    "top" "float4" NOT NULL,
+    "right" "float4" NOT NULL,
+    "bottom" "float4" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
@@ -77,10 +80,15 @@ WITH CHECK (true);
 -- Create public.page_sections Table
 CREATE TABLE "public"."page_sections" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "page_id" "uuid" NOT NULL,
+    "record_id" "uuid" NOT NULL,
+    "page_number" "int4" NOT NULL,
+    "section_number" "int4" NOT NULL,
     "text" "text" NOT NULL,
-    "location" "text" NOT NULL,
     "embedding" "public"."vector" NOT NULL,
+    "left" "float4" NOT NULL,
+    "top" "float4" NOT NULL,
+    "right" "float4" NOT NULL,
+    "bottom" "float4" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
@@ -90,7 +98,7 @@ ALTER TABLE ONLY "public"."page_sections"
     ADD CONSTRAINT "page_sections_pkey" PRIMARY KEY ("id");
 
 ALTER TABLE ONLY "public"."page_sections"
-    ADD CONSTRAINT "page_sections_fkey" FOREIGN KEY ("page_id") REFERENCES "public"."page_summaries"("id");
+    ADD CONSTRAINT "page_sections_fkey" FOREIGN KEY ("record_id") REFERENCES "public"."medical_records"("id");
 
 ALTER TABLE "public"."page_sections" ENABLE ROW LEVEL SECURITY;
 
