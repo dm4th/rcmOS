@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const createFileSupabase = async (jobId, file, setUploadStage, setUploadProgress, setSupabaseId) => {
-    setUploadStage('Creating Document Record in Supabase');
-    setUploadProgress(0);
+export const createFileSupabase = async (jobId, file) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -18,7 +16,7 @@ export const createFileSupabase = async (jobId, file, setUploadStage, setUploadP
         .select('id')
         .eq('textract_job_id', jobId);
     if (error) {
-        console.log(error);
+        alert(error);
         return;
     }
 
@@ -28,16 +26,27 @@ export const createFileSupabase = async (jobId, file, setUploadStage, setUploadP
     }
 
     // TODO: upload file to supabase storage
+    const fileUrl = `records/${file.name}`;
+    const { error: uploadError } = await supabase.storage
+        .from('records')
+        .upload(fileUrl, file);
+    if (uploadError) {
+        alert(uploadError);
+        return;
+    }
 
     const { data: insertData, error: insertError } = await supabase
         .from('medical_records')
-        .insert([{ textract_job_id: jobId }])
+        .insert([{ 
+            textract_job_id: jobId,
+            file_name: file.name,
+            file_url: fileUrl,
+        }])
         .select();
     if (insertError) {
-        console.log(insertError);
+        alert(insertError);
         return;
     }
-    setSupabaseId(insertData[0].id);
     return insertData[0].id;
 };
 
@@ -74,8 +83,6 @@ export const handlePageSupabase = async (pageData, recordId, setUploadStage, set
         pageData: preProcessedPageData,
         recordId,
     };
-
-    console.log(requestBody);
 
     const { data, error } = await supabase.functions.invoke('process-page', {
         body: JSON.stringify(requestBody),

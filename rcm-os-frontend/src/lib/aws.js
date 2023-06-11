@@ -1,6 +1,91 @@
 // deno-lint-ignore-file no-async-promise-executor
 import axios from 'axios';
 
+export const uploadFileAWS = async (file, setUploadStage, setUploadProgress) => {
+    if (!file) {
+        // If no file is passed to the function, return hard-coded textract job id
+        const jobId = "e1e46135476447b62ef5ce57b78c7e253440f2e97abd22c02bc583f50e30a2e3";
+        setUploadStage(`Using hardcoded jobId: ${jobId}`);
+        setUploadProgress(100);
+        return jobId;
+    }
+
+    // If file type is not a pdf, return nothing
+    if (file.type !== 'application/pdf') {
+        alert('Please upload a PDF file.');
+        return;
+    }
+    
+    
+    setUploadStage('Uploading Record to S3 for Preprocessing');
+    setUploadProgress(0);
+    
+    // Request Pre-Signed URL from API Gateway
+    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL, {
+        fileName: file.name,
+    });
+    const url = JSON.parse(urlRes.data.body).url;
+
+    // Upload file to S3 with Pre-Signed URL
+    const uploadRes = await axios.put(url, file, {
+        headers: {
+            'Content-Type': 'application/pdf',
+        },
+        onUploadProgress: (progressEvent) => {
+            const { loaded, total } = progressEvent;
+            const percent = Math.floor((loaded / total) * 100);
+            setUploadProgress(percent);
+        },
+    });
+
+    if (uploadRes.status !== 200) {
+        alert('Error uploading file to S3');
+        setUploadStage(null);
+        setUploadProgress(0);
+        return;
+    }
+
+    // Kick off Textract Processing
+    setUploadStage('Starting Textract OCR Processing');
+    setUploadProgress(null);
+    const textractRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+        S3Object: {
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET,
+            Name: file.name,
+        },
+    });
+    const jobId = JSON.parse(textractRes.data.body).JobId;
+
+    return jobId;
+}
+
+export const pollJobAWS = async (jobId, setUploadStage, setUploadProgress) => {
+    // Poll Textract Job Status
+    setUploadStage('Processing Document with AWS Textract');
+    setUploadProgress(0);
+    let jobStatus = 'IN_PROGRESS';
+    let statusRes;
+    let uploadTracker = 0;
+    while (jobStatus === 'IN_PROGRESS') {
+        // poll every 0.5 seconds
+        await new Promise((resolve) => {
+            setTimeout(resolve, 1000);
+        });
+        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            JobId: jobId,
+        });
+        jobStatus = JSON.parse(statusRes.data.body).JobStatus;
+        uploadTracker++;
+        if (uploadTracker >= 100) {
+            setUploadStage('Processing Document with AWS Textract - Taking Longer than Expected');
+            setUploadProgress(null)
+        }
+        else setUploadProgress((prevProgress) => prevProgress + 1);
+    }
+
+    return JSON.parse(statusRes.data.body).Metadata.Pages
+}
+
 export const handleFileAWS = async (
     file, 
     setUploadStage, 
@@ -114,7 +199,6 @@ export const handleFileAWS = async (
                 const { completedPages, leftoverBlocks } = handlePageAWS(oldBlocks, newBlocks);
                 oldBlocks = leftoverBlocks;
                 for (let i = 0; i < completedPages.length; i++) {
-                    console.log(`Passing to supabase with ID ${recordId}`)
                     handlePageSupabase(completedPages[i], recordId, setUploadStageSupabase, setUploadProgressSupabase, totalPages);
                 }
         

@@ -1,9 +1,15 @@
 CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "public";
 
+-- Create PDF storage bucket
+insert into storage.buckets (id, name)
+values ('records', 'Medical Records');
+
 -- Create public.medical_records Table
 CREATE TABLE "public"."medical_records" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "textract_job_id" "text" NOT NULL,
+    "file_name" "text" NOT NULL,
+    "file_url" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 

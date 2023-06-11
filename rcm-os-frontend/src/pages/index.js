@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
 
-import { handleFileAWS } from '@/lib/aws';
+import { uploadFileAWS, pollJobAWS, handleFileAWS } from '@/lib/aws';
 import { createFileSupabase, handlePageSupabase } from '@/lib/supabase';
+import { pollJobAWS } from '../lib/aws.js';
 
 export default function Home() {
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
 
     const [uploadStageAWS, setUploadStageAWS] = useState(null);
-    const [uploadProgressAWS, setUploadProgressAWS] = useState(0);
+    const [uploadProgressAWS, setUploadProgressAWS] = useState(null);
 
     const [supabaseId, setSupabaseId] = useState(null); 
     const [uploadStageSupabase, setUploadStageSupabase] = useState(null);
-    const [uploadProgressSupabase, setUploadProgressSupabase] = useState(0);
+    const [uploadProgressSupabase, setUploadProgressSupabase] = useState(null);
 
     useEffect(() => {
         setUploadStageAWS(null);
@@ -25,16 +26,7 @@ export default function Home() {
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         setAppStage('processing');
-        handleFileAWS(
-            file, 
-            setUploadStageAWS, 
-            setUploadProgressAWS,
-            createFileSupabase,
-            handlePageSupabase,
-            setUploadStageSupabase,
-            setUploadProgressSupabase,
-            setSupabaseId
-        );
+        processFile(file);
         setAppStage('chat');
     };
 
@@ -42,33 +34,51 @@ export default function Home() {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
         setAppStage('processing');
-        handleFileAWS(
-            file, 
-            setUploadStageAWS, 
-            setUploadProgressAWS,
-            createFileSupabase,
-            handlePageSupabase,
-            setUploadStageSupabase,
-            setUploadProgressSupabase,
-            setSupabaseId
-        );
+        handleFileAWS(file);
         setAppStage('chat');
     };
 
     const handleTestingButtonClick = () => {
         setAppStage('processing');
-        handleFileAWS(
-            null, 
-            setUploadStageAWS, 
-            setUploadProgressAWS,
-            createFileSupabase,
-            handlePageSupabase,
-            setUploadStageSupabase,
-            setUploadProgressSupabase,
-            setSupabaseId
-        );
+        processFile(null)
         setAppStage('chat');
     };
+
+    const processFile = async (file) => {
+        // Helper function to go through each stage of the processing cycle
+        // Some parts between AWS and SupaBase can be done in parallel
+
+        // Step 1:
+            // AWS: Upload file to S3 and begin Textract OCR Job
+        // Step 2: 
+            // AWS: Poll for completed Textract Job
+            // SupaBase: Uplpad file to SupaBase Storage, Create new record of pointer to storage & textract Job Id
+        // Step 3:
+            // AWS: Retrieve Processed Textract Job Blocks
+        // Step 4:
+            // SupaBase: Generate Section summaries for each page, upload summary & actual textual embeddings, upload to SupaBase
+
+        // Step 1:
+        const textractId = await uploadFileAWS(file, setUploadStageAWS, setUploadProgressAWS);
+
+        // Step 2:
+        Promise.allSettled([
+            pollJobAWS(textractId),
+            createFileSupabase(textractId, file)
+        ]).then((results) => {
+            const pollPromise = results[0];
+            const filePromise = results[1];
+
+            if (pollPromise.status === 'fulfilled') {
+                const pageCount = pollPromise.value;
+                setUploadStageAWS(`Textract Processed ${pageCount} Pages`);
+            }
+
+            if (filePromise.status === 'fulfilled') {
+                setSupabaseId(filePromise.value);
+            }
+        });
+    }
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-white dark:bg-gray-900">
@@ -108,13 +118,6 @@ export default function Home() {
                     <div className="flex flex-col items-center justify-center mt-6">
                         <p className="text-2xl text-gray-900 dark:text-white">
                             {uploadStageSupabase} {uploadProgressSupabase !== 0 && ` - ${uploadProgressSupabase}%`} 
-                        </p>
-                    </div>
-                )}
-                {supabaseId && (
-                    <div className="flex flex-col items-center justify-center mt-6">
-                        <p className="text-2xl text-gray-900 dark:text-white">
-                            Supabase ID: {supabaseId} 
                         </p>
                     </div>
                 )}
