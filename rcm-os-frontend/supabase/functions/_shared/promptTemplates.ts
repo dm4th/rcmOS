@@ -3,7 +3,6 @@ import { PromptTemplate } from "https://esm.sh/langchain/prompts";
 
 const MAX_PAGE_SUMMARY_TOKENS = 2500;
 const PAGE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
-const SECTION_EMBEDDING_CONFIDENCE_THRESHOLD = 0.99;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
 

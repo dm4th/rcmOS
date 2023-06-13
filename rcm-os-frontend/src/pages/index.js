@@ -1,47 +1,61 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
 
-import { uploadFileAWS, pollJobAWS, handleFileAWS } from '@/lib/aws';
-import { createFileSupabase, handlePageSupabase } from '@/lib/supabase';
-import { pollJobAWS } from '../lib/aws.js';
+import { CSSTransition } from 'react-transition-group';
+
+import { Intro } from '@/components/Intro';
+import { Processing } from '@/components/Processing';
+
+import { uploadFileAWS, pollJobAWS, getResultsAWS } from '@/lib/aws';
+import { createFileSupabase, handleSummarySupabase, handleTextSupabase } from '@/lib/supabase';
+
+const awsProcessingStages = [
+    { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
+    { stage: 'Processing Document with AWS Textract', progress: 0, max: 100, active: false },
+    { stage: 'Retrieving Textract Results', progress: 0, max: 100, active: false },
+];
+
+const supabaseProcessingStages = [
+    { stage: 'Uploading Document to SupaBase Storage', progress: 0, max: 100, active: false },
+    { stage: 'Generating Line by Line Embeddings', progress: 0, max: 100, active: false },
+    { stage: 'Generating Section Summaries & Embeddings', progress: 0, max: 100, active: false },
+];
 
 export default function Home() {
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
 
-    const [uploadStageAWS, setUploadStageAWS] = useState(null);
-    const [uploadProgressAWS, setUploadProgressAWS] = useState(null);
+    const [file, setFile] = useState(null);
+    const [uploadStageAWS, setUploadStageAWS] = useState(awsProcessingStages);
+    const [uploadStageSupabase, setUploadStageSupabase] = useState(supabaseProcessingStages);
 
-    const [supabaseId, setSupabaseId] = useState(null); 
-    const [uploadStageSupabase, setUploadStageSupabase] = useState(null);
-    const [uploadProgressSupabase, setUploadProgressSupabase] = useState(null);
+    const [supabaseId, setSupabaseId] = useState(null);
 
     useEffect(() => {
-        setUploadStageAWS(null);
-        setUploadProgressAWS(0);
-        setUploadStageSupabase(null);
-        setUploadProgressSupabase(0);
+        if (appStage === 'processing') {
+            processFile(file);
+        } else {
+            setUploadStageAWS(awsProcessingStages);
+            setUploadStageSupabase(supabaseProcessingStages);
+        }
     }, [appStage]);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
+        setFile(file);
         setAppStage('processing');
-        processFile(file);
-        setAppStage('chat');
     };
 
     const handleFileDrop = (e) => {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
+        setFile(file);
         setAppStage('processing');
-        handleFileAWS(file);
-        setAppStage('chat');
     };
 
     const handleTestingButtonClick = () => {
+        setFile(null);
         setAppStage('processing');
-        processFile(null)
-        setAppStage('chat');
     };
 
     const processFile = async (file) => {
@@ -56,71 +70,138 @@ export default function Home() {
         // Step 3:
             // AWS: Retrieve Processed Textract Job Blocks
         // Step 4:
-            // SupaBase: Generate Section summaries for each page, upload summary & actual textual embeddings, upload to SupaBase
+            // SupaBase: Generate Section summaries for each page, upload summary & Embeddings to Syupabase
+            // SupaBase: Generate line by line embeddings for each page, upload embeddings to SupaBase
 
         // Step 1:
-        const textractId = await uploadFileAWS(file, setUploadStageAWS, setUploadProgressAWS);
+        let awsStage = 0;
+        setUploadStageAWS((prevState) => {
+            const newState = [...prevState];
+            newState[awsStage].active = true;
+            return newState;
+        });
+        const textractId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
 
         // Step 2:
-        Promise.allSettled([
-            pollJobAWS(textractId),
-            createFileSupabase(textractId, file)
+        awsStage = 1;
+        setUploadStageAWS((prevState) => {
+            const newState = [...prevState];
+            newState[awsStage].active = true;
+            return newState;
+        });
+        setUploadStageSupabase((prevState) => {
+            const newState = [...prevState];
+            newState[0].active = true;
+            return newState;
+        });
+
+        let recordId = null;
+        await Promise.allSettled([
+            pollJobAWS(textractId, awsStage, setUploadStageAWS),
+            createFileSupabase(textractId, file, 0, setUploadStageSupabase)
         ]).then((results) => {
             const pollPromise = results[0];
             const filePromise = results[1];
 
             if (pollPromise.status === 'fulfilled') {
-                const pageCount = pollPromise.value;
-                setUploadStageAWS(`Textract Processed ${pageCount} Pages`);
+                const pages = pollPromise.value;
+                if (!pages) {
+                    alert('Textract Error');
+                }
             }
 
             if (filePromise.status === 'fulfilled') {
                 setSupabaseId(filePromise.value);
+                recordId = filePromise.value;
             }
         });
-    }
+
+        if (!recordId) {
+            alert('Supabase Error');
+            return;
+        }
+
+        // Step 3: 
+        awsStage = 2;
+        setUploadStageAWS((prevState) => {
+            const newState = [...prevState];
+            newState[awsStage].active = true;
+            return newState;
+        });
+        const textractBlocks = await getResultsAWS(textractId, awsStage, setUploadStageAWS);
+
+        // Step 4:
+        // ADD PROGRESS UPDATES IN PROMISE 
+        setUploadStageSupabase((prevState) => {
+            const newState = [...prevState];
+            newState[1].active = true;
+            newState[2].active = true;
+            return newState;
+        });
+        await Promise.allSettled([
+            handleTextSupabase(textractBlocks, recordId, 1, setUploadStageSupabase),
+            handleSummarySupabase(textractBlocks, recordId, 2, setUploadStageSupabase),
+        ]).then((results) => {
+            const textPromise = results[0];
+            const summaryPromise = results[1];
+
+            if (textPromise.status === 'fulfilled') {
+                setUploadStageSupabase((prevState) => {
+                    const newState = [...prevState];
+                    newState[1].progress = 100;
+                    return newState;
+                });
+            }
+
+            if (summaryPromise.status === 'fulfilled') {
+                setUploadStageSupabase((prevState) => {
+                    const newState = [...prevState];
+                    newState[2].progress = 100;
+                    return newState;
+                });
+            }
+        });
+
+        // Change app state now that processing is done
+        setAppStage('chat');
+
+    };
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-white dark:bg-gray-900">
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center">
-                <h1 className="text-6xl font-bold text-gray-900 dark:text-white">
-                    Welcome to rcmOS
-                </h1>
-
-                <p className="mt-3 text-2xl text-gray-900 dark:text-white">
-                    Upload a medical record to get started.
-                </p>
-
-                <div className="flex items-center justify-center mt-6">
-                    <label 
-                        className="w-64 flex flex-col items-center px-4 py-6 bg-white text-blue rounded-lg shadow-lg tracking-wide uppercase border border-blue cursor-pointer hover:bg-blue hover:text-white dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700 dark:border-gray-700 dark:shadow-none"
-                        onDrop={handleFileDrop}
-                        onDragOver={(e) => e.preventDefault()}
-                    >
-                        <svg className="w-8 h-8" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                            <path d="M17 10h-4V0H7v10H3l7 7 7-7z" />
-                        </svg>
-                        <span className="mt-2 text-base leading-normal">Upload Record</span>
-                        <input type='file' className="hidden" onChange={handleFileChange} />
-                    </label>
-                </div>
-                <button onClick={handleTestingButtonClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
-                    Run LLM Processing with Pre-Processed Textract Record
-                </button>
-                {uploadStageAWS && (
+            {appStage === 'intro' && (
+                <CSSTransition
+                    in={appStage === 'intro'}
+                    timeout={300}
+                    classNames="slide-up"
+                    unmountOnExit
+                >
+                    <Intro handleFileChange={handleFileChange} handleFileDrop={handleFileDrop} handleTestingButtonClick={handleTestingButtonClick} />
+                </CSSTransition>
+            )}
+            {appStage === 'processing' && (
+                <CSSTransition
+                    in={appStage === 'processing'}
+                    timeout={300}
+                    classNames="slide-up"
+                    unmountOnExit
+                >
+                    <Processing uploadStageAWS={uploadStageAWS} uploadStageSupabase={uploadStageSupabase} />
+                </CSSTransition>
+            )}
+            {appStage === 'chat' && (
+                <CSSTransition
+                    in={appStage === 'chat'}
+                    timeout={300}
+                    classNames="slide-up"
+                    unmountOnExit
+                >
                     <div className="flex flex-col items-center justify-center mt-6">
-                        <p className="text-2xl text-gray-900 dark:text-white">
-                            {uploadStageAWS} {uploadProgressAWS !== 0 && ` - ${uploadProgressAWS}%`} 
-                        </p>
+                        <p> Chat </p>
                     </div>
-                )}
-                {uploadStageSupabase && (
-                    <div className="flex flex-col items-center justify-center mt-6">
-                        <p className="text-2xl text-gray-900 dark:text-white">
-                            {uploadStageSupabase} {uploadProgressSupabase !== 0 && ` - ${uploadProgressSupabase}%`} 
-                        </p>
-                    </div>
-                )}
+                </CSSTransition>
+            )}
             </main>
         </div>
     )

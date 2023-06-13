@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
-import { pageSummaryTemplate, pageSectionSummaryTemplate, markdownTableGenerator } from '../_shared/promptTemplates.ts';
+import { pageSectionSummaryTemplate, markdownTableGenerator } from '../_shared/promptTemplates.ts';
 import { OpenAI } from "https://esm.sh/langchain/llms/openai";
 import { LLMChain } from "https://esm.sh/langchain/chains";
 
@@ -19,7 +19,10 @@ async function handler(req: Request) {
     } 
 
     try {
+        console.log('page request received');
         const { pageData, recordId } = await req.json();
+        console.log(pageData);
+        console.log(recordId);
 
         // First pull the page number from the pageData first element
         const pageNumber = pageData[0].page;
@@ -27,7 +30,15 @@ async function handler(req: Request) {
 
         // Generate page markdown table string - do not send the first element of the pageData array
         const markdownHeaders = ["Text", "Confidence", "Left", "Top", "Width", "Height"];
-        const markdownArray = pageData.slice(1).map((block: Any) => {
+        interface Block {
+            text: string;
+            confidence: number;
+            left: number;
+            top: number;
+            width: number;
+            height: number;
+        }
+        const markdownArray = pageData.slice(1).map((block: Block) => {
             return [
                 block.text,
                 block.confidence,
@@ -61,7 +72,7 @@ async function handler(req: Request) {
             });
 
             // Run the LLM Chain
-            const sectionOutput = await sectionChain.call();
+            const sectionOutput = await sectionChain.call({});
             const sectionOutputText = sectionOutput.text;
 
             console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);

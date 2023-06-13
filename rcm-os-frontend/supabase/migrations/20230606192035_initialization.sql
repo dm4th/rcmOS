@@ -1,8 +1,18 @@
 CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "public";
 
 -- Create PDF storage bucket
-insert into storage.buckets (id, name)
-values ('records', 'Medical Records');
+INSERT INTO storage.buckets (id, name)
+VALUES ('records', 'Medical Records');
+
+CREATE POLICY "Anon to Read Medical Records"
+ON storage.objects for SELECT
+TO anon
+USING ( bucket_id = 'records' );
+
+CREATE POLICY "Anon to Write Medical Records"
+ON storage.objects for INSERT
+TO anon
+WITH CHECK ( bucket_id = 'records' );
 
 -- Create public.medical_records Table
 CREATE TABLE "public"."medical_records" (
@@ -88,7 +98,6 @@ CREATE TABLE "public"."page_sections" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "record_id" "uuid" NOT NULL,
     "page_number" "int4" NOT NULL,
-    "section_number" "int4" NOT NULL,
     "text" "text" NOT NULL,
     "embedding" "public"."vector" NOT NULL,
     "left" "float4" NOT NULL,

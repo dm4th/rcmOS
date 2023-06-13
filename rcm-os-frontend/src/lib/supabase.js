@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const createFileSupabase = async (jobId, file) => {
+export const createFileSupabase = async (jobId, file, stage, setUploadStage) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -11,6 +11,8 @@ export const createFileSupabase = async (jobId, file) => {
     // else: 
         // 1. upload the file to supabase storage 
         // 2. create a new record and set the id using setSupabaseId
+
+    // check for existing record
     const { data, error } = await supabase
         .from('medical_records')
         .select('id')
@@ -21,20 +23,35 @@ export const createFileSupabase = async (jobId, file) => {
     }
 
     if (data.length > 0) {
-        setSupabaseId(data[0].id);
+        setUploadStage((prevState) => {
+            const newState = [...prevState];
+            newState[stage].progress = 100;
+            return newState;
+        });
         return data[0].id;
     }
 
-    // TODO: upload file to supabase storage
+    // upload file to supabase storage
     const fileUrl = `records/${file.name}`;
     const { error: uploadError } = await supabase.storage
         .from('records')
         .upload(fileUrl, file);
     if (uploadError) {
-        alert(uploadError);
-        return;
+        if (uploadError.statusCode === '409') {
+            console.log('File already exists in storage');
+        }
+        else {
+            console.error(uploadError);
+            return;
+        }
     }
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].progress = 50;
+        return newState;
+    });
 
+    // create new record in medical_records table
     const { data: insertData, error: insertError } = await supabase
         .from('medical_records')
         .insert([{ 
@@ -44,56 +61,121 @@ export const createFileSupabase = async (jobId, file) => {
         }])
         .select();
     if (insertError) {
-        alert(insertError);
+        console.error(insertError);
         return;
     }
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].progress = 100;
+        return newState;
+    });
     return insertData[0].id;
 };
 
-export const handlePageSupabase = async (pageData, recordId, setUploadStage, setUploadProgress, totalPages) => {
-    setUploadStage('Uploading Pages to Supabase');
-    const currentPage = pageData[0].Page;
+export const handleSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    );
+    const totalPages = blocks[blocks.length - 1][0].Page;
+    for (const pageData of blocks) {
+        const currentPage = pageData[0].Page;
+        console.log(`Processing page ${currentPage}`);
 
-    const preProcessedPageData = pageData.map((block) => {
-        if (block.BlockType === 'PAGE') {
+        const preProcessedPageData = pageData.map((block) => {
+            if (block.BlockType === 'PAGE') {
+                return {
+                    blockType: block.BlockType,
+                    page: block.Page,
+                };
+            }
             return {
                 blockType: block.BlockType,
+                confidence: block.Confidence,
+                text: block.Text,
+                left: block.Geometry.BoundingBox.Left,
+                top: block.Geometry.BoundingBox.Top,
+                width: block.Geometry.BoundingBox.Width,
+                height: block.Geometry.BoundingBox.Height,
                 page: block.Page,
             };
-        }
-        return {
-            blockType: block.BlockType,
-            confidence: block.Confidence,
-            text: block.Text,
-            left: block.Geometry.BoundingBox.Left,
-            top: block.Geometry.BoundingBox.Top,
-            width: block.Geometry.BoundingBox.Width,
-            height: block.Geometry.BoundingBox.Height,
-            page: block.Page,
-        };
-    });
+        });
 
-    // Send page data and page id to Supabase Edge Function
+        // Send page data and page id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            recordId,
+        };
+
+        console.log(requestBody);
+
+        const { data, error } = await supabase.functions.invoke('process-page', {
+            body: JSON.stringify(requestBody),
+        });
+        if (error) {
+            console.log(error);
+            return;
+        }
+        console.log(`Page ${currentPage} data sent to Supabase Edge Function`);
+        console.log(data);
+
+        setUploadStage((prevState) => {
+            const newState = [...prevState];
+            newState[stage].progress = Math.floor((currentPage / totalPages) * 100);
+            return newState;
+        });
+    }
+};
+
+export const handleTextSupabase = async (blocks, recordId, stage, setUploadStage) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
 
-    const requestBody = {
-        pageData: preProcessedPageData,
-        recordId,
-    };
+    //flatten blocks array, filter for line blocks only, filter for 99% and greater confidence
+    const textBlocks = blocks.flat();
+    const lineBlocks = textBlocks.filter((block) => block.BlockType === 'LINE').filter((block) => block.Confidence >= 99);
 
-    const { data, error } = await supabase.functions.invoke('process-page', {
-        body: JSON.stringify(requestBody),
+    // set the max progress to the number of lines
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].maxProgress = lineBlocks.length;
+        return newState;
     });
-    if (error) {
-        console.log(error);
-        return;
-    }
-    console.log(`Page ${currentPage} data sent to Supabase Edge Function`);
-    console.log(data);
 
-    const progress = Math.floor((currentPage / totalPages) * 100);
-    setUploadProgress(progress);
+    for (const line in lineBlocks) {
+        console.log(`Processing line ${line}`);
+        const preProcessedLineData = {
+            page_number: lineBlocks[line].Page,
+            confidence: lineBlocks[line].Confidence,
+            text: lineBlocks[line].Text,
+            left: lineBlocks[line].Geometry.BoundingBox.Left,
+            top: lineBlocks[line].Geometry.BoundingBox.Top,
+            width: lineBlocks[line].Geometry.BoundingBox.Width,
+            height: lineBlocks[line].Geometry.BoundingBox.Height,
+        };
+
+        // Send line data and record id to Supabase Edge Function
+        const requestBody = {
+            lineData: preProcessedLineData,
+            recordId,
+        };
+
+        console.log(requestBody);
+
+        const { error } = await supabase.functions.invoke('process-word', {
+            body: JSON.stringify(requestBody),
+        });
+        if (error) {
+            console.log(error);
+            return;
+        }
+
+        setUploadStage((prevState) => {
+            const newState = [...prevState];
+            newState[stage].progress = Math.floor((line / lineBlocks.length) * 100);
+            return newState;
+        });
+    }
 };
