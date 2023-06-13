@@ -53,25 +53,38 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
             Name: file.name,
         },
     });
-    const jobId = JSON.parse(textractRes.data.body).JobId;
+    const textJobId = JSON.parse(textractRes.data.body).TextJobId;
+    const analysisJobId = JSON.parse(textractRes.data.body).AnalysisJobId;
 
-    return jobId;
+    return {
+        textJobId,
+        analysisJobId
+    };
 };
 
-export const pollJobAWS = async (jobId, stage, setUploadStage) => {
+export const pollJobAWS = async (jobIds, stage, setUploadStage) => {
     // Poll Textract Job Status
-    let jobStatus = 'IN_PROGRESS';
-    let statusRes;
+    let jobStatus = { text: 'IN_PROGRESS', analysis: 'IN_PROGRESS' };
+    let textStatusRes;
+    let analysisStatusRes;
     let uploadTracker = 0;
-    while (jobStatus === 'IN_PROGRESS') {
+    while (jobStatus.text === 'IN_PROGRESS' && jobStatus.analysis === 'IN_PROGRESS') {
         // poll every 0.5 seconds
         await new Promise((resolve) => {
             setTimeout(resolve, 1000);
         });
-        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
-            JobId: jobId,
+
+        textStatusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            Job: 'Text',
+            JobId: jobIds.textJobId,
         });
-        jobStatus = JSON.parse(statusRes.data.body).JobStatus;
+        jobStatus.text = JSON.parse(textStatusRes.data.body).JobStatus;
+        analysisStatusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            Job: 'Analysis',
+            JobId: jobIds.analysisJobId,
+        });
+        jobStatus.analysis = JSON.parse(analysisStatusRes.data.body).JobStatus;
+
         uploadTracker++;
         if (uploadTracker >= 95) {
             setUploadStage((prevState) => {
@@ -90,7 +103,7 @@ export const pollJobAWS = async (jobId, stage, setUploadStage) => {
     }
 
     // If job status is not SUCCEEDED, return null
-    if (jobStatus !== 'SUCCEEDED') {
+    if (jobStatus.text !== 'SUCCEEDED' || jobStatus.analysis !== 'SUCCEEDED') {
         alert('Error processing file with AWS Textract');
         return null;
     }
@@ -101,7 +114,10 @@ export const pollJobAWS = async (jobId, stage, setUploadStage) => {
         newState[stage].progress = 100;
         return newState;
     });
-    return JSON.parse(statusRes.data.body).Metadata.Pages
+    return {
+        textPages: JSON.parse(textStatusRes.data.body).Metadata.Pages,
+        analysisPages: JSON.parse(analysisStatusRes.data.body).Metadata.Pages,
+    };
 };
 
 export const getResultsAWS = async (jobId, stage, setUploadStage) => {

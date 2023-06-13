@@ -80,7 +80,7 @@ export default function Home() {
             newState[awsStage].active = true;
             return newState;
         });
-        const textractId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
+        const jobIds = await uploadFileAWS(file, awsStage, setUploadStageAWS);
 
         // Step 2:
         awsStage = 1;
@@ -97,15 +97,15 @@ export default function Home() {
 
         let recordId = null;
         await Promise.allSettled([
-            pollJobAWS(textractId, awsStage, setUploadStageAWS),
-            createFileSupabase(textractId, file, 0, setUploadStageSupabase)
+            pollJobAWS(jobIds, awsStage, setUploadStageAWS),
+            createFileSupabase(jobIds, file, 0, setUploadStageSupabase)
         ]).then((results) => {
             const pollPromise = results[0];
             const filePromise = results[1];
 
             if (pollPromise.status === 'fulfilled') {
-                const pages = pollPromise.value;
-                if (!pages) {
+                const { textPages, analysisPages } = pollPromise.value;
+                if (!textPages || !analysisPages) {
                     alert('Textract Error');
                 }
             }
@@ -128,6 +128,7 @@ export default function Home() {
             newState[awsStage].active = true;
             return newState;
         });
+        // TODO: ASYNC FOR TEXT & DOC ANALYSIS CONCURRENCY
         const textractBlocks = await getResultsAWS(textractId, awsStage, setUploadStageAWS);
 
         // Step 4:

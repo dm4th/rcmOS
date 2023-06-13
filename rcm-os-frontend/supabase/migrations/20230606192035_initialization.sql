@@ -17,7 +17,8 @@ WITH CHECK ( bucket_id = 'records' );
 -- Create public.medical_records Table
 CREATE TABLE "public"."medical_records" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "textract_job_id" "text" NOT NULL,
+    "text_job_id" "text" NOT NULL,
+    "analysis_job_id" "text" NOT NULL,
     "file_name" "text" NOT NULL,
     "file_url" "text" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
