@@ -17,10 +17,10 @@ WITH CHECK ( bucket_id = 'records' );
 -- Create public.medical_records Table
 CREATE TABLE "public"."medical_records" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "text_job_id" "text" NOT NULL,
-    "analysis_job_id" "text" NOT NULL,
+    "textract_job_id" "text" NOT NULL,
     "file_name" "text" NOT NULL,
     "file_url" "text" NOT NULL,
+    "content_embedding_progress" "int4" DEFAULT 0 NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
@@ -54,6 +54,7 @@ CREATE TABLE "public"."page_summaries" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
     "record_id" "uuid" NOT NULL,
     "page_number" "int4" NOT NULL,
+    "section_type" "text" NOT NULL,
     "section_number" "int4" NOT NULL,
     "title" "text" NOT NULL,
     "summary" "text" NOT NULL,

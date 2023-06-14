@@ -7,18 +7,18 @@ import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
 
 import { uploadFileAWS, pollJobAWS, getResultsAWS } from '@/lib/aws';
-import { createFileSupabase, handleSummarySupabase, handleTextSupabase } from '@/lib/supabase';
+import { createFileSupabase, handleTextSummarySupabase, handleTextSupabase } from '@/lib/supabase';
 
 const awsProcessingStages = [
     { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
     { stage: 'Processing Document with AWS Textract', progress: 0, max: 100, active: false },
-    { stage: 'Retrieving Textract Results', progress: 0, max: 100, active: false },
+    { stage: 'Retrieving Textract Analysis Results', progress: 0, max: 100, active: false },
 ];
 
 const supabaseProcessingStages = [
     { stage: 'Uploading Document to SupaBase Storage', progress: 0, max: 100, active: false },
-    { stage: 'Generating Line by Line Embeddings', progress: 0, max: 100, active: false },
-    { stage: 'Generating Section Summaries & Embeddings', progress: 0, max: 100, active: false },
+    { stage: 'Generating Text Summaries & Embeddings', progress: 0, max: 100, active: false },
+    { stage: 'Generating Table Summaries & Embeddings', progress: 0, max: 100, active: false },
 ];
 
 export default function Home() {
@@ -70,8 +70,12 @@ export default function Home() {
         // Step 3:
             // AWS: Retrieve Processed Textract Job Blocks
         // Step 4:
-            // SupaBase: Generate Section summaries for each page, upload summary & Embeddings to Syupabase
-            // SupaBase: Generate line by line embeddings for each page, upload embeddings to SupaBase
+            // SupaBase: Generate Section summaries for each page, upload summary & Embeddings to Supabase from text blocks
+            // SupaBase: Generate summaries for each table and page, upload summary & Embeddings to Supabase from analysis blocks
+        // Step 5: ASYNC! CAN BE DONE IN BACKGROUND
+            // SupaBase: Generate Line by Line Embeddings from text blocks
+            // SupaBase: Generate cell by cell embeddings from analysis blocks
+
 
         // Step 1:
         let awsStage = 0;
@@ -80,7 +84,7 @@ export default function Home() {
             newState[awsStage].active = true;
             return newState;
         });
-        const jobIds = await uploadFileAWS(file, awsStage, setUploadStageAWS);
+        const jobId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
 
         // Step 2:
         awsStage = 1;
@@ -97,15 +101,15 @@ export default function Home() {
 
         let recordId = null;
         await Promise.allSettled([
-            pollJobAWS(jobIds, awsStage, setUploadStageAWS),
-            createFileSupabase(jobIds, file, 0, setUploadStageSupabase)
+            pollJobAWS(jobId, awsStage, setUploadStageAWS),
+            createFileSupabase(jobId, file, 0, setUploadStageSupabase)
         ]).then((results) => {
             const pollPromise = results[0];
             const filePromise = results[1];
 
             if (pollPromise.status === 'fulfilled') {
-                const { textPages, analysisPages } = pollPromise.value;
-                if (!textPages || !analysisPages) {
+                const pages = pollPromise.value;
+                if (!pages) { 
                     alert('Textract Error');
                 }
             }
@@ -129,10 +133,13 @@ export default function Home() {
             return newState;
         });
         // TODO: ASYNC FOR TEXT & DOC ANALYSIS CONCURRENCY
-        const textractBlocks = await getResultsAWS(textractId, awsStage, setUploadStageAWS);
+        const blocks = await getResultsAWS(jobId, awsStage, setUploadStageAWS);
+
+        console.log(textBlocks);
+        console.log(analysisBlocks);
+
 
         // Step 4:
-        // ADD PROGRESS UPDATES IN PROMISE 
         setUploadStageSupabase((prevState) => {
             const newState = [...prevState];
             newState[1].active = true;
@@ -140,8 +147,8 @@ export default function Home() {
             return newState;
         });
         await Promise.allSettled([
-            handleTextSupabase(textractBlocks, recordId, 1, setUploadStageSupabase),
-            handleSummarySupabase(textractBlocks, recordId, 2, setUploadStageSupabase),
+            handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase),
+            handleTableSummarySupabase(analysisBlocks, recordId, 2, setUploadStageSupabase),
         ]).then((results) => {
             const textPromise = results[0];
             const summaryPromise = results[1];

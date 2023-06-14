@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const createFileSupabase = async (jobIds, file, stage, setUploadStage) => {
+export const createFileSupabase = async (jobId, file, stage, setUploadStage) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -16,8 +16,7 @@ export const createFileSupabase = async (jobIds, file, stage, setUploadStage) =>
     const { data, error } = await supabase
         .from('medical_records')
         .select('id')
-        .eq('text_job_id', jobIds.text)
-        .eq('analysis_job_id', jobIds.analysis);
+        .eq('textract_job_id', jobId);
     if (error) {
         alert(error);
         return;
@@ -56,8 +55,7 @@ export const createFileSupabase = async (jobIds, file, stage, setUploadStage) =>
     const { data: insertData, error: insertError } = await supabase
         .from('medical_records')
         .insert([{ 
-            text_job_id: jobIds.text,
-            analysis_job_id: jobIds.analysis,
+            textract_job_id: jobId,
             file_name: file.name,
             file_url: fileUrl,
         }])
@@ -74,7 +72,7 @@ export const createFileSupabase = async (jobIds, file, stage, setUploadStage) =>
     return insertData[0].id;
 };
 
-export const handleSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
+export const handleTextSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
