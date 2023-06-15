@@ -79,8 +79,11 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
     );
     const totalPages = blocks[blocks.length - 1][0].Page;
     for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
         const currentPage = pageData[0].Page;
-        console.log(`Processing page ${currentPage}`);
+        console.log(`Processing Text page ${currentPage}`);
 
         const preProcessedPageData = pageData.map((block) => {
             if (block.BlockType === 'PAGE') {
@@ -116,7 +119,7 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
             console.log(error);
             return;
         }
-        console.log(`Page ${currentPage} data sent to Supabase Edge Function`);
+        console.log(`Page ${currentPage} text data sent to Supabase Edge Function`);
         console.log(data);
 
         setUploadStage((prevState) => {
@@ -127,54 +130,105 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
     }
 };
 
-export const handleTextSupabase = async (blocks, recordId, stage, setUploadStage) => {
+export const handleTableSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
+    const totalPages = blocks.length;
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].page;
+        console.log(`Processing Tables page ${currentPage}`);
 
-    //flatten blocks array, filter for line blocks only, filter for 99% and greater confidence
-    const textBlocks = blocks.flat();
-    const lineBlocks = textBlocks.filter((block) => block.BlockType === 'LINE').filter((block) => block.Confidence >= 99);
+        const preProcessedPageData = pageData.map((block) => {
+            return {
+                confidence: block.confidence,
+                left: block.left,
+                top: block.top,
+                right: block.right,
+                bottom: block.bottom,
+                title: block.title,
+                footer: block.footer,
+                cells: block.cells
+            };
+        });
 
-    // set the max progress to the number of lines
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[stage].maxProgress = lineBlocks.length;
-        return newState;
-    });
-
-    for (const line in lineBlocks) {
-        console.log(`Processing line ${line}`);
-        const preProcessedLineData = {
-            page_number: lineBlocks[line].Page,
-            confidence: lineBlocks[line].Confidence,
-            text: lineBlocks[line].Text,
-            left: lineBlocks[line].Geometry.BoundingBox.Left,
-            top: lineBlocks[line].Geometry.BoundingBox.Top,
-            width: lineBlocks[line].Geometry.BoundingBox.Width,
-            height: lineBlocks[line].Geometry.BoundingBox.Height,
-        };
-
-        // Send line data and record id to Supabase Edge Function
+        // Send page data and page id to Supabase Edge Function
         const requestBody = {
-            lineData: preProcessedLineData,
+            pageData: preProcessedPageData,
             recordId,
         };
 
         console.log(requestBody);
 
-        const { error } = await supabase.functions.invoke('process-word', {
+        const { data, error } = await supabase.functions.invoke('process-table', {
             body: JSON.stringify(requestBody),
         });
         if (error) {
             console.log(error);
             return;
         }
+        console.log(`Page ${currentPage} table data sent to Supabase Edge Function`);
+        console.log(data);
 
         setUploadStage((prevState) => {
             const newState = [...prevState];
-            newState[stage].progress = Math.floor((line / lineBlocks.length) * 100);
+            newState[stage].progress = Math.floor((currentPage / totalPages) * 100);
+            return newState;
+        });
+    }
+};
+
+export const handleKvSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    );
+    const totalPages = blocks.length;
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].page;
+        console.log(`Processing Key-Value page ${currentPage}`);
+
+        const preProcessedPageData = pageData.map((block) => {
+            return {
+                confidence: Math.min(block.keyConfidence, block.valueConfidence),
+                left: block.left,
+                top: block.top,
+                right: block.right,
+                bottom: block.bottom,
+                key: block.key,
+                value: block.value,
+            };
+        });
+
+        // Send page data and page id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            page: currentPage,
+            recordId,
+        };
+
+        console.log(requestBody);
+
+        const { data, error } = await supabase.functions.invoke('process-kv', {
+            body: JSON.stringify(requestBody),
+        });
+        if (error) {
+            console.log(error);
+            return;
+        }
+        console.log(`Page ${currentPage} key-value data sent to Supabase Edge Function`);
+        console.log(data);
+
+        setUploadStage((prevState) => {
+            const newState = [...prevState];
+            newState[stage].progress = Math.floor((currentPage / totalPages) * 100);
             return newState;
         });
     }

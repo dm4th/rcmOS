@@ -1,15 +1,17 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
-import { pageSectionSummaryTemplate, textMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
+import { pageSectionSummaryTemplate, markdownTableGenerator } from '../_shared/promptTemplates.ts';
 import { OpenAI } from "https://esm.sh/langchain/llms/openai";
 import { LLMChain } from "https://esm.sh/langchain/chains";
+
+const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.5;
 
 const openai_api_key = Deno.env.get("OPENAI_API_KEY");
 
 async function handler(req: Request) {
     // First Check for CORS request
-    console.log("New text request received at ", new Date().toISOString());
+    console.log("New table request received at ", new Date().toISOString());
     if (req.method === "OPTIONS") {
         console.log("Handling CORS request: ", req.url);
         return new Response(null, {
@@ -19,36 +21,11 @@ async function handler(req: Request) {
     } 
 
     try {
-        console.log('page request received');
         const { pageData, recordId } = await req.json();
-        console.log(pageData);
-        console.log(recordId);
 
-        // First pull the page number from the pageData first element
+        // Create table level constants
         const pageNumber = pageData[0].page;
-        console.log(`Processing Page: ${pageNumber} with ${pageData.length} elements`);
-
-        // Generate page markdown table string - do not send the first element of the pageData array
-        const markdownHeaders = ["Text", "Confidence", "Left", "Top", "Width", "Height"];
-        interface Block {
-            text: string;
-            confidence: number;
-            left: number;
-            top: number;
-            width: number;
-            height: number;
-        }
-        const markdownArray = pageData.slice(1).map((block: Block) => {
-            return [
-                block.text,
-                block.confidence,
-                block.left,
-                block.top,
-                block.width,
-                block.height,
-            ];
-        });
-        const pageMarkdownArray = textMarkdownTableGenerator(markdownHeaders, markdownArray);
+        const markdownHeaders = ["Text", "Confidence", "Column Index", "Row Index", "Column Span", "Row Span"];
 
         // Create a new model instance
         const model = new OpenAI({
@@ -60,10 +37,45 @@ async function handler(req: Request) {
             modelName: "gpt-3.5-turbo",
         });
 
+        // Loop over each table object in the pageData array and generate a summary and title for each table section using the LLM
+        const tableSections = [];
+        for (let i = 0; i < pageData.length; i++) {
+            const table = pageData[i];
+            if (table.confidence < 0.5) continue;
+            let tablePrompt = `Table ${i+1} on page ${pageNumber}:\n`;
+            if (table.title) tablePrompt += `Title: ${table.title}\n`;
+            if (table.footer) tablePrompt += `Footer: ${table.footer}\n`;
+            // Round confidence to 4 decimal places
+            if (table.confidence) tablePrompt += `Confidence: ${table.confidence.toFixed(4)}\n`;
+
+        // Generate page markdown table array for each table object in the pageData array
+        
+        interface Cell {
+            text: string;
+            confidence: number;
+            columnIndex: number;
+            rowIndex: number;
+            columnSpan: number;
+            rowSpan: number;
+        }
+        const markdownArray = pageData.map((cell: Cell) => {
+            return [
+                cell.text,
+                cell.confidence,
+                cell.columnIndex,
+                cell.rowIndex,
+                cell.columnSpan,
+                cell.rowSpan,
+            ];
+        });
+        console.log(markdownArray);
+        const tableMarkdownArray = markdownTableGenerator(markdownHeaders, markdownArray);
+        console.log(tableMarkdownArray);
+
         // Loop over the page markdown and generate a summary and title for each section using the LLM
-        const pageSections = [];
+        const tableSections = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
-            const sectionPrompt = pageSectionSummaryTemplate(pageNumber, i, pageMarkdownArray[i].text);
+            const sectionPrompt = pageSectionSummaryTemplate(page, i, pageMarkdownArray[i].text);
 
             // Create LLM Chain
             const sectionChain = new LLMChain({

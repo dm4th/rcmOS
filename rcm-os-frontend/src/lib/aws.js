@@ -170,7 +170,6 @@ export const getResultsAWS = async (jobId, stage, setUploadStage) => {
         const maxLinePage = returnLineBlocks.length;
         const maxTablePage = returnTableBlocks.length > 0 ? Math.max(...returnTableBlocks.map((block) => block.page)) : 0;
         const maxKvPage = returnKvBlocks.length > 0 ? Math.max(...returnKvBlocks.map((block) => block.page)) : 0;
-        console.log(maxLinePage, maxTablePage, maxKvPage);
         const processedPages = maxLinePage + maxTablePage + maxKvPage;
         setUploadStage((prevState) => {
             const newState = [...prevState];
@@ -189,9 +188,6 @@ export const getResultsAWS = async (jobId, stage, setUploadStage) => {
         newState[stage].progress = 100;
         return newState;
     });
-    console.log(returnLineBlocks);
-    console.log(returnTableBlocks);
-    console.log(returnKvBlocks);
     return {
         returnLineBlocks,
         returnTableBlocks,
@@ -277,6 +273,7 @@ const createTable = (tableBlock) => {
         page: tableBlock.Page,
         title: null,
         footer: null,
+        confidence: tableBlock.Confidence,
         cells: [],
         left: tableBlock.Geometry.BoundingBox.Left,
         top: tableBlock.Geometry.BoundingBox.Top,
@@ -331,6 +328,8 @@ const createKv = (kvBlock) => {
         page: kvBlock.Page,
         key: null,
         value: null,
+        keyConfidence: kvBlock.Confidence,
+        valueConfidence: 0,
         left: kvBlock.Geometry.BoundingBox.Left,
         top: kvBlock.Geometry.BoundingBox.Top,
         right: kvBlock.Geometry.BoundingBox.Left + kvBlock.Geometry.BoundingBox.Width,
@@ -353,9 +352,10 @@ const processKv = (kv, blocks) => {
         const index = processBlocks.findIndex((block) => block.Id === childId);
         if (index !== -1) {
             const block = processBlocks[index];
-            const { returnText, returnLeft, returnTop, returnRight, returnBottom, returnBlocks } = retrieveValueAWS(block, kv.left, kv.top, kv.right, kv.bottom, processBlocks);
+            const { returnText, returnConfidence, returnLeft, returnTop, returnRight, returnBottom, returnBlocks } = retrieveValueAWS(block, kv.valueConfidence, kv.left, kv.top, kv.right, kv.bottom, processBlocks);
             processBlocks = returnBlocks;
             kv.value = returnText;
+            kv.valueConfidence = returnConfidence;
             if (returnLeft < kv.left) kv.left = returnLeft;
             if (returnTop < kv.top) kv.top = returnTop;
             if (returnRight > kv.right) kv.right = returnRight;
@@ -391,7 +391,7 @@ const retrieveTextAWS = (block, blocks) => {
 
     // If the block has text, add the text to the returnText string and remove the block from the blocks array
     if (block.Text) {
-        returnText += block.Text;
+        returnText += block.Text + ' ';
         const index = returnBlocks.findIndex((b) => b.Id === block.Id);
         if (index !== -1) {
             returnBlocks.splice(index, 1);
@@ -415,10 +415,11 @@ const retrieveTextAWS = (block, blocks) => {
     return { returnText, returnBlocks };
 };
 
-const retrieveValueAWS = (block, left, top, right, bottom, blocks) => {
+const retrieveValueAWS = (block, confidence, left, top, right, bottom, blocks) => {
     // Recursively search child blocks for text and remove the branch from the blocks array when text is found
     // If the block is a VALUE block, update bounding box values
     let returnText = '';
+    let returnConfidence = confidence;
     let returnLeft = left;
     let returnTop = top;
     let returnRight = right;
@@ -427,7 +428,7 @@ const retrieveValueAWS = (block, left, top, right, bottom, blocks) => {
 
     // If the block has text, add the text to the returnText string and remove the block from the blocks array
     if (block.Text) {
-        returnText += block.Text;
+        returnText += block.Text + ' ';
         const index = returnBlocks.findIndex((b) => b.Id === block.Id);
         if (index !== -1) {
             returnBlocks.splice(index, 1);
@@ -443,6 +444,7 @@ const retrieveValueAWS = (block, left, top, right, bottom, blocks) => {
     }
 
     else if (block.BlockType === 'KEY_VALUE_SET' && block.EntityTypes.includes('VALUE')) {
+        returnConfidence = block.Confidence > returnConfidence ? block.Confidence : returnConfidence;
         returnLeft = block.Geometry.BoundingBox.Left < returnLeft ? block.Geometry.BoundingBox.Left : returnLeft;
         returnTop = block.Geometry.BoundingBox.Top < returnTop ? block.Geometry.BoundingBox.Top : returnTop;
         returnRight = block.Geometry.BoundingBox.Left + block.Geometry.BoundingBox.Width > returnRight ? block.Geometry.BoundingBox.Left + block.Geometry.BoundingBox.Width : returnRight;
@@ -456,8 +458,9 @@ const retrieveValueAWS = (block, left, top, right, bottom, blocks) => {
         childIds.forEach((child) => {
             const index = returnBlocks.findIndex((b) => b.Id === child);
             if (index !== -1) {
-                const { returnText: childText, returnLeft: childLeft, returnTop: childTop, returnRight: childRight, returnBottom: childBottom, returnBlocks: childBlocks } = retrieveValueAWS(returnBlocks[index], returnLeft, returnTop, returnRight, returnBottom, returnBlocks);
+                const { returnText: childText, returnConfidence: childConfidence, returnLeft: childLeft, returnTop: childTop, returnRight: childRight, returnBottom: childBottom, returnBlocks: childBlocks } = retrieveValueAWS(returnBlocks[index], returnConfidence, returnLeft, returnTop, returnRight, returnBottom, returnBlocks);
                 returnText += childText;
+                returnConfidence = childConfidence;
                 returnLeft = childLeft;
                 returnTop = childTop;
                 returnRight = childRight;
@@ -467,5 +470,5 @@ const retrieveValueAWS = (block, left, top, right, bottom, blocks) => {
         });
     }
 
-    return { returnText, returnLeft, returnTop, returnRight, returnBottom, returnBlocks };
+    return { returnText, returnConfidence, returnLeft, returnTop, returnRight, returnBottom, returnBlocks };
 };

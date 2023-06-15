@@ -7,7 +7,7 @@ import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
 
 import { uploadFileAWS, pollJobAWS, getResultsAWS } from '@/lib/aws';
-import { createFileSupabase, handleTextSummarySupabase, handleTextSupabase } from '@/lib/supabase';
+import { createFileSupabase, handleTextSummarySupabase, handleTableSummarySupabase, handleKvSummarySupabase } from '@/lib/supabase';
 
 const awsProcessingStages = [
     { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
@@ -19,6 +19,7 @@ const supabaseProcessingStages = [
     { stage: 'Uploading Document to SupaBase Storage', progress: 0, max: 100, active: false },
     { stage: 'Generating Text Summaries & Embeddings', progress: 0, max: 100, active: false },
     { stage: 'Generating Table Summaries & Embeddings', progress: 0, max: 100, active: false },
+    { stage: 'Generating Key-Value Summaries & Embeddings', progress: 0, max: 100, active: false },
 ];
 
 export default function Home() {
@@ -72,9 +73,7 @@ export default function Home() {
         // Step 4:
             // SupaBase: Generate Section summaries for each page, upload summary & Embeddings to Supabase from text blocks
             // SupaBase: Generate summaries for each table and page, upload summary & Embeddings to Supabase from analysis blocks
-        // Step 5: ASYNC! CAN BE DONE IN BACKGROUND
-            // SupaBase: Generate Line by Line Embeddings from text blocks
-            // SupaBase: Generate cell by cell embeddings from analysis blocks
+            // SupaBase: Generate summaries for collections of Key-Value pairs on each page, upload summary & Embeddings to Supabase from analysis blocks
 
 
         // Step 1:
@@ -133,10 +132,31 @@ export default function Home() {
             return newState;
         });
         // TODO: ASYNC FOR TEXT & DOC ANALYSIS CONCURRENCY
-        const blocks = await getResultsAWS(jobId, awsStage, setUploadStageAWS);
+        const { returnLineBlocks: textBlocks, returnTableBlocks, returnKvBlocks } = await getResultsAWS(jobId, awsStage, setUploadStageAWS);
+
+        // tableBlocks aleady set of as array of arrays (one inner array per page)
+        // Other blocks need to be converted to array of arrays, with one inner array containing all blocks for a given page
+        let tableBlocks = [];
+        for (var i = 0; i < returnTableBlocks.length; i++) {
+            const tablePage = returnTableBlocks[i].page;
+            while (tableBlocks.length < tablePage) {
+                tableBlocks.push([]);
+            }
+            tableBlocks[tablePage-1].push(returnTableBlocks[i]);
+        }
+
+        let kvBlocks = [];
+        for (var i = 0; i < returnKvBlocks.length; i++) {
+            const kvPage = returnKvBlocks[i].page;
+            while (kvBlocks.length < kvPage) {
+                kvBlocks.push([]);
+            }
+            kvBlocks[kvPage-1].push(returnKvBlocks[i]);
+        }
 
         console.log(textBlocks);
-        console.log(analysisBlocks);
+        console.log(tableBlocks);
+        console.log(kvBlocks);
 
 
         // Step 4:
@@ -144,14 +164,17 @@ export default function Home() {
             const newState = [...prevState];
             newState[1].active = true;
             newState[2].active = true;
+            newState[3].active = true;
             return newState;
         });
         await Promise.allSettled([
             handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase),
-            handleTableSummarySupabase(analysisBlocks, recordId, 2, setUploadStageSupabase),
+            handleTableSummarySupabase(tableBlocks, recordId, 2, setUploadStageSupabase),
+            handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase),
         ]).then((results) => {
             const textPromise = results[0];
-            const summaryPromise = results[1];
+            const tablePromise = results[1];
+            const kvPromise = results[2];
 
             if (textPromise.status === 'fulfilled') {
                 setUploadStageSupabase((prevState) => {
@@ -161,10 +184,18 @@ export default function Home() {
                 });
             }
 
-            if (summaryPromise.status === 'fulfilled') {
+            if (tablePromise.status === 'fulfilled') {
                 setUploadStageSupabase((prevState) => {
                     const newState = [...prevState];
                     newState[2].progress = 100;
+                    return newState;
+                });
+            }
+
+            if (kvPromise.status === 'fulfilled') {
+                setUploadStageSupabase((prevState) => {
+                    const newState = [...prevState];
+                    newState[3].progress = 100;
                     return newState;
                 });
             }

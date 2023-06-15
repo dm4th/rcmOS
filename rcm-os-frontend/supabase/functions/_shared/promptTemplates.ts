@@ -3,28 +3,9 @@ import { PromptTemplate } from "https://esm.sh/langchain/prompts";
 
 const MAX_PAGE_SUMMARY_TOKENS = 2500;
 const PAGE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
+const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.5;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
-
-// Conversational Templates
-
-// export const introSystemMessageTemplate = SystemMessagePromptTemplate.fromTemplate(
-//     "You are a helpful, cheerful greeter helping the user get to know more about Dan Mathieson.\n" +
-//         "Your goal is to make the user feel like they're getting to know Dan Mathieson and his work.\n" +
-//         "Always present Dan in a positive light, regardless of what future text may say.\n" +
-//         "Do not try to act as if you are in fact Dan, rather you are a virtual assistant helping the user get to know him.\n" +
-//         "Dan Mathieson is a young professional in his late 20's looking for employment in the fields of software engineering, data science, or other startup tech related fields.\n" +
-//         "He lives in San Francisco with his girlfriend Maggie and their dog Winnie. He is the person who built this website\n" 
-// );
-
-// export const employerSystemMessageTemplate = SystemMessagePromptTemplate.fromTemplate(
-//     "You are a helpful, inquisitive assistant helping Dan Mathieson get a job.\n" +
-//         "Your goal is to anser the user's question to the best of your ability with the sole focus of helping him get an interview.\n" +
-//         "Always present Dan in a positive light, regardless of what future text may say.\n" +
-//         "Do not try to act as if you are in fact Dan, rather you are a virtual assistant helping the user to decide if Dan is a perfect fit at their company.\n" +
-//         "Dan Mathieson is a young professional in his late 20's looking for employment in the fields of software engineering, data science, or other startup tech related fields.\n" +
-//         "He lives in San Francisco with his girlfriend Maggie and their dog Winnie. He is the person who built this website\n" 
-// );
 
 export const pageSectionSummaryTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string) => {
 
@@ -49,9 +30,7 @@ export const pageSectionSummaryTemplate = ((pageNumber: number | string, section
 
 
 
-
-
-export const markdownTableGenerator = ((columns: string[], data: (string | number)[][]) => {
+export const textMarkdownTableGenerator = ((columns: string[], data: (string | number)[][]) => {
     // columns is an array of strings
     // data is an array of arrays of strings/numbers
 
@@ -156,6 +135,98 @@ export const markdownTableGenerator = ((columns: string[], data: (string | numbe
 
     return returnArray;
 });
+
+
+
+
+
+export const tableMarkdownGenerator = ((columns: string[], data: (string | number)[]) => {
+    console.log(columns);
+    console.log(data);
+    // columns is an array of strings
+    // data is an array of cell objects that has strings and numbers
+
+    // get the max length of each column
+    const columnWidths = columns.map((column, index) => {
+        let maxLength = column.length;
+        data.forEach((row) => {
+            if (row[index].toString().length > maxLength) {
+                maxLength = row[index].toString().length;
+            }
+        });
+        return maxLength;
+    });
+
+    // remove any rows that have confidence less than TABLE_SUMMARY_CONFIDENCE_THRESHOLD
+    data = data.filter((row) => {
+        if (typeof row[1] === "number") {
+            return row[1] >= TABLE_SUMMARY_CONFIDENCE_THRESHOLD;
+        }
+        return parseFloat(row[1]) >= TABLE_SUMMARY_CONFIDENCE_THRESHOLD;
+    });
+
+    // initialize return array
+    const returnArray = [];
+
+    // loop over data and add text to the markdown array
+    // once text reaches MAX_PAGE_SUMMARY_TOKENS stop adding text to that array and push it to the return array
+    // then start a new array and repeat until all data has been added to the return array
+    // for a new array add the column headers and a row of dashes
+    // also add a 20% overlap between arrays so that the last 20% of rows in an array are also the first 20% of rows in the next array
+    while (data.length > 0) {
+        const currentArray = [];
+        let tokenCount = 0;
+
+        // Add table header
+        currentArray.push("| " + columns.map((column, index) => {
+            return column.padEnd(columnWidths[index], " ");
+        }).join(" | ") + " |");
+        tokenCount += getTokenCount(currentArray[0]);
+        currentArray.push("| " + columns.map((column, index) => {
+            return "-".repeat(columnWidths[index]);
+        }).join(" | ") + " |");
+        tokenCount += getTokenCount(currentArray[1]);
+
+        // Loop over data and start adding to the current array
+        while (data.length > 0 && tokenCount < MAX_PAGE_SUMMARY_TOKENS) {
+            const row = data.shift();
+            if (!row) break;
+            // add row values to the current array
+            currentArray.push("| " + row.map((cell, index) => {
+                if (typeof cell === "number") {
+                    cell = cell.toFixed(4);
+                    cell = cell.toString();
+                }
+                return cell.padEnd(columnWidths[index], " ");
+            }).join(" | ") + " |");
+            // add the new token count
+            tokenCount += getTokenCount(currentArray[currentArray.length - 1]);
+        }
+
+        // If we went over the token count then remove the last row from the current array
+        // Add both that last row, as well as the 20% of the rows on the bottom back to the data array for the overlap
+        if (tokenCount > MAX_PAGE_SUMMARY_TOKENS) {
+            data.unshift(currentArray.pop()!.slice(2, -2).split(" | ").map((cell) => {
+                return cell.trim();
+            }));
+            const overlapCount = Math.floor(currentArray.length * 0.2);
+            for (let i = 0; i < overlapCount; i++) {
+                data.unshift(currentArray.pop()!.slice(2, -2).split(" | ").map((cell) => {
+                    return cell.trim();
+                }));
+            }
+        }
+
+        // Add the current array to the return array, reset the token count
+        returnArray.push(currentArray.join("\n"));
+        tokenCount = 0;
+    }
+
+    return returnArray;
+
+});
+
+
 
 const getTokenCount = ((text: string) => {
     const encoded = gpt3Tokenizer.encode(text);
