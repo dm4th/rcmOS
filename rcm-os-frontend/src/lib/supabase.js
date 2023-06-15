@@ -110,8 +110,6 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
             recordId,
         };
 
-        console.log(requestBody);
-
         const { data, error } = await supabase.functions.invoke('process-page', {
             body: JSON.stringify(requestBody),
         });
@@ -145,6 +143,7 @@ export const handleTableSummarySupabase = async (blocks, recordId, stage, setUpl
 
         const preProcessedPageData = pageData.map((block) => {
             return {
+                page: block.page,
                 confidence: block.confidence,
                 left: block.left,
                 top: block.top,
@@ -161,8 +160,6 @@ export const handleTableSummarySupabase = async (blocks, recordId, stage, setUpl
             pageData: preProcessedPageData,
             recordId,
         };
-
-        console.log(requestBody);
 
         const { data, error } = await supabase.functions.invoke('process-table', {
             body: JSON.stringify(requestBody),

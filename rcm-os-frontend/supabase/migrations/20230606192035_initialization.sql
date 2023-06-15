@@ -56,6 +56,7 @@ CREATE TABLE "public"."page_summaries" (
     "page_number" "int4" NOT NULL,
     "section_type" "text" NOT NULL,
     "section_number" "int4" NOT NULL,
+    "sub_section_number" "int4",
     "title" "text" NOT NULL,
     "summary" "text" NOT NULL,
     "summary_embedding" "public"."vector" NOT NULL,

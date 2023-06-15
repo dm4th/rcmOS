@@ -1,9 +1,9 @@
 import GPT3Tokenizer from 'https://esm.sh/gpt3-tokenizer';
 import { PromptTemplate } from "https://esm.sh/langchain/prompts";
 
-const MAX_PAGE_SUMMARY_TOKENS = 2500;
+const MAX_PAGE_SUMMARY_TOKENS = 3000;
 const PAGE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
-const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.5;
+const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
 
@@ -25,6 +25,28 @@ export const pageSectionSummaryTemplate = ((pageNumber: number | string, section
         "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
         "TITLE: <title of page section>\n" +
         "SUMMARY: <summary of page section>"
+    );
+});
+
+export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber: number, markdownTable: string) => {
+
+    return PromptTemplate.fromTemplate(
+        `Below is a description of section ${sectionNumber} of a table pulled from a medical record using machine learning. The table has the following characteristics:\n` +
+        tablePrompt +
+        "\nBelow is a markdown formatted table describing the cells of data found in the described section of this table. Here are calumn descriptions for the markdown table:\n\n" +
+        // const markdownHeaders = ["Text", "Confidence", "Column Index", "Row Index", "Column Span", "Row Span"];
+        "1. Text: The text retrieved from the cell in the table\n" +
+        "2. Confidence: A percentage with 100% being very confident that the text pulled from the cell is correct. Anything below 50% should be viewed very cautiously.\n" +
+        "3. Column Index: The column the cell appears in for the table.\n" +
+        "4. Row Index: The row the cell appears in for the table.\n" +
+        "5. Column Span: How many columns in the table the given cell spans, starting from Column Index and going right.\n" +
+        "6. Row Span: How many rows in the table the given cell spans, starting from Row Index and going down.\n" +
+        "\nBelow is the data for the retrieved section of the table:\n\n" +
+        markdownTable +
+        "\n\nGiven the above information about the text and data retrieved from the table, what is the title of the information and a 1 to 2 paragraph summary of the table section.\n" +
+        "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
+        "TITLE: <title of table section>\n" +
+        "SUMMARY: <summary of table section>"
     );
 });
 
@@ -138,32 +160,53 @@ export const textMarkdownTableGenerator = ((columns: string[], data: (string | n
 
 
 
+interface Cell {
+    text: string;
+    confidence: number;
+    columnIndex: number;
+    rowIndex: number;
+    columnSpan: number;
+    rowSpan: number;
+}
 
-
-export const tableMarkdownGenerator = ((columns: string[], data: (string | number)[]) => {
-    console.log(columns);
-    console.log(data);
+export const tableMarkdownTableGenerator = ((columns: string[], data: Cell[], initialPrompt: string) => {
     // columns is an array of strings
     // data is an array of cell objects that has strings and numbers
+
+    // remove any rows that have confidence less than TABLE_SUMMARY_CONFIDENCE_THRESHOLD
+    // data = data.filter((row) => {
+    //     return row.confidence < TABLE_SUMMARY_CONFIDENCE_THRESHOLD;
+    // });
 
     // get the max length of each column
     const columnWidths = columns.map((column, index) => {
         let maxLength = column.length;
         data.forEach((row) => {
-            if (row[index].toString().length > maxLength) {
-                maxLength = row[index].toString().length;
+            switch (index) {
+                case 0:
+                    if (row.text.length > maxLength) maxLength = row.text.length;
+                    break;
+                case 1:
+                    if (row.confidence.toFixed(4).length > maxLength) maxLength = row.confidence.toFixed(4).length;
+                    break;
+                case 2:
+                    if (row.columnIndex.toString().length > maxLength) maxLength = row.columnIndex.toString().length;
+                    break;
+                case 3:
+                    if (row.rowIndex.toString().length > maxLength) maxLength = row.rowIndex.toString().length;
+                    break;
+                case 4:
+                    if (row.columnSpan.toString().length > maxLength) maxLength = row.columnSpan.toString().length;
+                    break;
+                case 5:
+                    if (row.rowSpan.toString().length > maxLength) maxLength = row.rowSpan.toString().length;
+                    break;
             }
         });
         return maxLength;
     });
-
-    // remove any rows that have confidence less than TABLE_SUMMARY_CONFIDENCE_THRESHOLD
-    data = data.filter((row) => {
-        if (typeof row[1] === "number") {
-            return row[1] >= TABLE_SUMMARY_CONFIDENCE_THRESHOLD;
-        }
-        return parseFloat(row[1]) >= TABLE_SUMMARY_CONFIDENCE_THRESHOLD;
-    });
+    // count how many tokens the initial prompt takes up
+    const initialPromptTokenCount = getTokenCount(initialPrompt);
 
     // initialize return array
     const returnArray = [];
@@ -175,7 +218,7 @@ export const tableMarkdownGenerator = ((columns: string[], data: (string | numbe
     // also add a 20% overlap between arrays so that the last 20% of rows in an array are also the first 20% of rows in the next array
     while (data.length > 0) {
         const currentArray = [];
-        let tokenCount = 0;
+        let tokenCount = initialPromptTokenCount;
 
         // Add table header
         currentArray.push("| " + columns.map((column, index) => {
@@ -188,16 +231,15 @@ export const tableMarkdownGenerator = ((columns: string[], data: (string | numbe
         tokenCount += getTokenCount(currentArray[1]);
 
         // Loop over data and start adding to the current array
+        const cellStore = [];
         while (data.length > 0 && tokenCount < MAX_PAGE_SUMMARY_TOKENS) {
-            const row = data.shift();
-            if (!row) break;
-            // add row values to the current array
-            currentArray.push("| " + row.map((cell, index) => {
-                if (typeof cell === "number") {
-                    cell = cell.toFixed(4);
-                    cell = cell.toString();
-                }
-                return cell.padEnd(columnWidths[index], " ");
+            const cell = data.shift();
+            cellStore.push(cell);
+            if (!cell) break;
+            // add cell values to the current array
+            const cellValues = [cell.text, cell.confidence.toFixed(4), cell.columnIndex.toString(), cell.rowIndex.toString(), cell.columnSpan.toString(), cell.rowSpan.toString()];
+            currentArray.push("| " + cellValues.map((val, index) => {
+                return val.padEnd(columnWidths[index], " ");
             }).join(" | ") + " |");
             // add the new token count
             tokenCount += getTokenCount(currentArray[currentArray.length - 1]);
@@ -206,20 +248,16 @@ export const tableMarkdownGenerator = ((columns: string[], data: (string | numbe
         // If we went over the token count then remove the last row from the current array
         // Add both that last row, as well as the 20% of the rows on the bottom back to the data array for the overlap
         if (tokenCount > MAX_PAGE_SUMMARY_TOKENS) {
-            data.unshift(currentArray.pop()!.slice(2, -2).split(" | ").map((cell) => {
-                return cell.trim();
-            }));
-            const overlapCount = Math.floor(currentArray.length * 0.2);
+            data.unshift(cellStore.pop()!);
+            const overlapCount = Math.floor(data.length * 0.2);
             for (let i = 0; i < overlapCount; i++) {
-                data.unshift(currentArray.pop()!.slice(2, -2).split(" | ").map((cell) => {
-                    return cell.trim();
-                }));
-            }
+                data.unshift(cellStore.pop()!);
+            }            
         }
 
-        // Add the current array to the return array, reset the token count
+        // Add the current array to the return array
         returnArray.push(currentArray.join("\n"));
-        tokenCount = 0;
+        tokenCount = initialPromptTokenCount;
     }
 
     return returnArray;

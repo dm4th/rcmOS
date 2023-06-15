@@ -154,11 +154,6 @@ export default function Home() {
             kvBlocks[kvPage-1].push(returnKvBlocks[i]);
         }
 
-        console.log(textBlocks);
-        console.log(tableBlocks);
-        console.log(kvBlocks);
-
-
         // Step 4:
         setUploadStageSupabase((prevState) => {
             const newState = [...prevState];
@@ -170,11 +165,11 @@ export default function Home() {
         await Promise.allSettled([
             handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase),
             handleTableSummarySupabase(tableBlocks, recordId, 2, setUploadStageSupabase),
-            handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase),
+            // handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase),
         ]).then((results) => {
             const textPromise = results[0];
             const tablePromise = results[1];
-            const kvPromise = results[2];
+            // const kvPromise = results[2];
 
             if (textPromise.status === 'fulfilled') {
                 setUploadStageSupabase((prevState) => {
@@ -192,13 +187,13 @@ export default function Home() {
                 });
             }
 
-            if (kvPromise.status === 'fulfilled') {
-                setUploadStageSupabase((prevState) => {
-                    const newState = [...prevState];
-                    newState[3].progress = 100;
-                    return newState;
-                });
-            }
+            // if (kvPromise.status === 'fulfilled') {
+            //     setUploadStageSupabase((prevState) => {
+            //         const newState = [...prevState];
+            //         newState[3].progress = 100;
+            //         return newState;
+            //     });
+            // }
         });
 
         // Change app state now that processing is done

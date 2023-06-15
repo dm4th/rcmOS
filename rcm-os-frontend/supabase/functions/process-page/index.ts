@@ -19,10 +19,7 @@ async function handler(req: Request) {
     } 
 
     try {
-        console.log('page request received');
         const { pageData, recordId } = await req.json();
-        console.log(pageData);
-        console.log(recordId);
 
         // First pull the page number from the pageData first element
         const pageNumber = pageData[0].page;
@@ -80,8 +77,6 @@ async function handler(req: Request) {
             pageSections.push(sectionOutputText);
         }
 
-        console.log(pageSections);
-
         // loop over the page sections, embed the summary and write to the database
         const insertRows = [];
         for (let i = 0; i < pageSections.length; i++) {
@@ -112,6 +107,7 @@ async function handler(req: Request) {
             insertRows.push({
                 "record_id": recordId,
                 "page_number": pageNumber,
+                "section_type": "text",
                 "section_number": i,
                 "title": title,
                 "summary": summary,

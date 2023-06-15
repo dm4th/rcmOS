@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
-import { pageSectionSummaryTemplate, markdownTableGenerator } from '../_shared/promptTemplates.ts';
+import { tableSectionSummaryTemplate, tableMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
 import { OpenAI } from "https://esm.sh/langchain/llms/openai";
 import { LLMChain } from "https://esm.sh/langchain/chains";
 
@@ -37,105 +37,93 @@ async function handler(req: Request) {
             modelName: "gpt-3.5-turbo",
         });
 
+        // Create insertRows array to store the new rows to be inserted into the database
+        const insertRows = [];
+
         // Loop over each table object in the pageData array and generate a summary and title for each table section using the LLM
-        const tableSections = [];
         for (let i = 0; i < pageData.length; i++) {
             const table = pageData[i];
-            if (table.confidence < 0.5) continue;
-            let tablePrompt = `Table ${i+1} on page ${pageNumber}:\n`;
-            if (table.title) tablePrompt += `Title: ${table.title}\n`;
-            if (table.footer) tablePrompt += `Footer: ${table.footer}\n`;
+
+            // Skip tables with low confidence
+            if (table.confidence < TABLE_SUMMARY_CONFIDENCE_THRESHOLD) continue;
+
+            let tablePrompt = `Description: Table ${i+1} on page ${pageNumber}:\n`;
+            if (table.title) tablePrompt += `Title: ${table.title} - Title of the Table\n`;
+            if (table.footer) tablePrompt += `Footer: ${table.footer} - Footer text at the bottom of the table\n`;
             // Round confidence to 4 decimal places
-            if (table.confidence) tablePrompt += `Confidence: ${table.confidence.toFixed(4)}\n`;
+            if (table.confidence) tablePrompt += `Confidence: ${table.confidence.toFixed(4).toString()} - Confidence in the accuracy of the data pulled using machine learning\n`;
+            if (table.left) tablePrompt += `Left: ${table.left.toFixed(4).toString()} - Left-most position of the table on the page it was pulled from, with 0 being the left edge of the page and 100 being the right edge.\n`;
+            if (table.top) tablePrompt += `Top: ${table.top.toFixed(4).toString()} - Top-most position of the table on the page it was pulled from, with 0 being the top edge of the page and 100 being the bottom edge.\n`;
+            if (table.right) tablePrompt += `Right: ${table.right.toFixed(4).toString()} - Right-most position of the table on the page it was pulled from\n`;
+            if (table.bottom) tablePrompt += `Bottom: ${table.bottom.toFixed(4).toString()} - Bottom-most position of the table on the page it was pulled from\n`;
 
-        // Generate page markdown table array for each table object in the pageData array
-        
-        interface Cell {
-            text: string;
-            confidence: number;
-            columnIndex: number;
-            rowIndex: number;
-            columnSpan: number;
-            rowSpan: number;
-        }
-        const markdownArray = pageData.map((cell: Cell) => {
-            return [
-                cell.text,
-                cell.confidence,
-                cell.columnIndex,
-                cell.rowIndex,
-                cell.columnSpan,
-                cell.rowSpan,
-            ];
-        });
-        console.log(markdownArray);
-        const tableMarkdownArray = markdownTableGenerator(markdownHeaders, markdownArray);
-        console.log(tableMarkdownArray);
+            // Generate a markdown table describing the cells in the table
+            const tableMarkdownArray = tableMarkdownTableGenerator(markdownHeaders, table.cells, tablePrompt);
 
-        // Loop over the page markdown and generate a summary and title for each section using the LLM
-        const tableSections = [];
-        for (let i = 0; i < pageMarkdownArray.length; i++) {
-            const sectionPrompt = pageSectionSummaryTemplate(page, i, pageMarkdownArray[i].text);
+            const tableSections = [];
+            // Loop over table sections and generate a summary for each
+            for (let j = 0; j < tableMarkdownArray.length; j++) {
+                const tableSectionPrompt = tableSectionSummaryTemplate(tablePrompt, j, tableMarkdownArray[j]);
 
-            // Create LLM Chain
-            const sectionChain = new LLMChain({
-                llm: model,
-                prompt: sectionPrompt,
-            });
+                // Create LLM Chain
+                const llmChain = new LLMChain({
+                    llm: model,
+                    prompt: tableSectionPrompt,
+                });
 
-            // Run the LLM Chain
-            const sectionOutput = await sectionChain.call({});
-            const sectionOutputText = sectionOutput.text;
+                // Run the LLM Chain
+                const llmOutput = await llmChain.call({});
+                const llmOutputText = llmOutput.text;
 
-            console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
+                console.log(`Page ${pageNumber} Table ${i} Section ${j}\nOutput:\n${llmOutputText}`);
 
-            pageSections.push(sectionOutputText);
-        }
+                tableSections.push(llmOutputText);
+            }
 
-        console.log(pageSections);
+            // loop over the table sections, embed the summary and write to the database
+            for (let j = 0; j < tableSections.length; j++) {
+                // Generate embedding for the page section summary
+                const embeddingUrl = "https://api.openai.com/v1/embeddings";
+                const embeddingHeaders = {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${openai_api_key}`
+                };
 
-        // loop over the page sections, embed the summary and write to the database
-        const insertRows = [];
-        for (let i = 0; i < pageSections.length; i++) {
-            // Generate embedding for the page section summary
-            const embeddingUrl = "https://api.openai.com/v1/embeddings";
-            const embeddingHeaders = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${openai_api_key}`
-            };
+                const embeddingBody = JSON.stringify({
+                    "input": tableSections[j],
+                    "model": "text-embedding-ada-002",
+                });
 
-            const embeddingBody = JSON.stringify({
-                "input": pageSections[i],
-                "model": "text-embedding-ada-002",
-            });
+                const embeddingResponse = await fetch(embeddingUrl, {
+                    method: "POST",
+                    headers: embeddingHeaders,
+                    body: embeddingBody
+                });
+                const embeddingJson = await embeddingResponse.json();
+                const summaryEmbedding = embeddingJson.data[0].embedding;
 
-            const embeddingResponse = await fetch(embeddingUrl, {
-                method: "POST",
-                headers: embeddingHeaders,
-                body: embeddingBody
-            });
-            const embeddingJson = await embeddingResponse.json();
-            const summaryEmbedding = embeddingJson.data[0].embedding;
+                // Generate the title and summary
+                const title = tableSections[j].split("TITLE:")[1].split("SUMMARY:")[0].trim();
+                const summary = tableSections[j].split("SUMMARY:")[1].trim();
 
-            // Generate the title and summary
-            const title = pageSections[i].split("TITLE:")[1].split("SUMMARY:")[0].trim();
-            const summary = pageSections[i].split("SUMMARY:")[1].trim();
-
-            insertRows.push({
-                "record_id": recordId,
-                "page_number": pageNumber,
-                "section_number": i,
-                "title": title,
-                "summary": summary,
-                "summary_embedding": summaryEmbedding,
-                "left": pageMarkdownArray[i].left,
-                "top": pageMarkdownArray[i].top,
-                "right": pageMarkdownArray[i].right,
-                "bottom": pageMarkdownArray[i].bottom,
-            });
+                insertRows.push({
+                    "record_id": recordId,
+                    "page_number": pageNumber,
+                    "section_type": "table",
+                    "section_number": i,
+                    "sub_section_number": j,
+                    "title": title,
+                    "summary": summary,
+                    "summary_embedding": summaryEmbedding,
+                    "left": table.left,
+                    "top": table.top,
+                    "right": table.right,
+                    "bottom": table.bottom,
+                });
+            }
         }
 
-        // Write the page summaries to the database
+        // Write the table summaries to the database
         const { data, error } = await supabaseClient
             .from("page_summaries")
             .insert(insertRows)
