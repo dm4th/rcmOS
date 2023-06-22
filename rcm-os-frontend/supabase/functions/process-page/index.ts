@@ -57,8 +57,8 @@ async function handler(req: Request) {
             modelName: "gpt-3.5-turbo",
         });
 
-        // Loop over the page markdown and generate a summary and title for each section using the LLM
-        const pageSections = [];
+        // Create async promises to summarize the page markdown using the LLM
+        const pagePromises = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
             const sectionPrompt = pageSectionSummaryTemplate(pageNumber, i, pageMarkdownArray[i].text);
 
@@ -69,17 +69,23 @@ async function handler(req: Request) {
             });
 
             // Run the LLM Chain
-            const sectionOutput = await sectionChain.call({});
-            const sectionOutputText = sectionOutput.text;
+            pagePromises.push(sectionChain.call({}));
+            // const sectionOutputText = sectionOutput.text;
 
-            console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
+            // console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
 
-            pageSections.push(sectionOutputText);
+            // pageSections.push(sectionOutputText);
         }
+
+        // Wait for all the page section summaries to be generated
+        const promiseResults = await Promise.all(pagePromises);
 
         // loop over the page sections, embed the summary and write to the database
         const insertRows = [];
-        for (let i = 0; i < pageSections.length; i++) {
+        for (let i = 0; i < promiseResults.length; i++) {
+            const sectionOutputText = promiseResults[i].text;
+            console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
+
             // Generate embedding for the page section summary
             const embeddingUrl = "https://api.openai.com/v1/embeddings";
             const embeddingHeaders = {
@@ -88,7 +94,7 @@ async function handler(req: Request) {
             };
 
             const embeddingBody = JSON.stringify({
-                "input": pageSections[i],
+                "input": sectionOutputText,
                 "model": "text-embedding-ada-002",
             });
 
@@ -101,8 +107,8 @@ async function handler(req: Request) {
             const summaryEmbedding = embeddingJson.data[0].embedding;
 
             // Generate the title and summary
-            const title = pageSections[i].split("TITLE:")[1].split("SUMMARY:")[0].trim();
-            const summary = pageSections[i].split("SUMMARY:")[1].trim();
+            const title = sectionOutputText.split("TITLE:")[1].split("SUMMARY:")[0].trim();
+            const summary = sectionOutputText.split("SUMMARY:")[1].trim();
 
             insertRows.push({
                 "record_id": recordId,

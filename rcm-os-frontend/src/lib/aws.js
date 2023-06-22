@@ -4,7 +4,7 @@ import axios from 'axios';
 export const uploadFileAWS = async (file, stage, setUploadStage) => {
     if (!file) {
         // If no file is passed to the function, return hard-coded textract job id
-        const jobIds = "b1e2cff6ab4ebf52e387b295101bc1404e11e4e710e200864ff20868e4bfcba7";
+        const jobIds = "5783f4a4659d08961d4f37694e33b6b397c8a45e37a1fcddaa94f2e7db94af06";
         setUploadStage((prevState) => {
             const newState = [...prevState];
             newState[stage].progress = 100;
@@ -310,7 +310,7 @@ const processTable = (table, blocks) => {
                         rowIndex: block.RowIndex,
                         rowSpan: block.RowSpan,
                         confidence: block.Confidence,
-                        text: returnText,
+                        text: returnText ? returnText : "",
                     });
                 }
             }
@@ -326,8 +326,8 @@ const createKv = (kvBlock) => {
     const textChildren = kvBlock.Relationships.find((r) => r.Type === 'CHILD');
     return {
         page: kvBlock.Page,
-        key: null,
-        value: null,
+        key: "",
+        value: "",
         keyConfidence: kvBlock.Confidence,
         valueConfidence: 0,
         left: kvBlock.Geometry.BoundingBox.Left,
@@ -354,7 +354,7 @@ const processKv = (kv, blocks) => {
             const block = processBlocks[index];
             const { returnText, returnConfidence, returnLeft, returnTop, returnRight, returnBottom, returnBlocks } = retrieveValueAWS(block, kv.valueConfidence, kv.left, kv.top, kv.right, kv.bottom, processBlocks);
             processBlocks = returnBlocks;
-            kv.value = returnText;
+            kv.value = returnText ? returnText : "";
             kv.valueConfidence = returnConfidence;
             if (returnLeft < kv.left) kv.left = returnLeft;
             if (returnTop < kv.top) kv.top = returnTop;
@@ -374,7 +374,7 @@ const processKv = (kv, blocks) => {
             const block = processBlocks[index];
             const { returnText, returnBlocks } = retrieveTextAWS(block, processBlocks);
             processBlocks = returnBlocks;
-            kv.key = returnText;
+            kv.key = returnText ? returnText : "";
             kv.processedChildren.push(childId);
         }
     }
@@ -436,7 +436,7 @@ const retrieveValueAWS = (block, confidence, left, top, right, bottom, blocks) =
     }
 
     else if (block.SelectionStatus) {
-        returnText += block.SelectionStatus === 'SELECTED' ? 'T' : 'F';
+        returnText += block.SelectionStatus === 'SELECTED' ? 'TRUE' : 'FALSE';
         const index = returnBlocks.findIndex((b) => b.Id === block.Id);
         if (index !== -1) {
             returnBlocks.splice(index, 1);

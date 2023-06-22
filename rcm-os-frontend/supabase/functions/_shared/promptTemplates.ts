@@ -4,12 +4,11 @@ import { PromptTemplate } from "https://esm.sh/langchain/prompts";
 const MAX_PAGE_SUMMARY_TOKENS = 3000;
 const PAGE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
+const KV_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
 
 export const pageSectionSummaryTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string) => {
-
-    // pageData is a string with a markdown formmated table of contents
 
     return PromptTemplate.fromTemplate(
         `Below is a markdown formatted table of text pulled from section ${sectionNumber} on page ${pageNumber} of a medical record using machine learning. The table contains the following columns:\n` +
@@ -22,6 +21,7 @@ export const pageSectionSummaryTemplate = ((pageNumber: number | string, section
         "\nBelow is the data for the retrieved page:\n\n" +
         markdownTable +
         "\n\nGiven the above information about the text retrieved from the document, what is the title of the page section and a 1 to 2 paragraph summary of the page section.\n" +
+        "In your summary please be as specific as possible about what information is contained in the text, and cite specific names, numbers, dates and other unique items explicitly.\n" +
         "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
         "TITLE: <title of page section>\n" +
         "SUMMARY: <summary of page section>"
@@ -44,12 +44,53 @@ export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber:
         "\nBelow is the data for the retrieved section of the table:\n\n" +
         markdownTable +
         "\n\nGiven the above information about the text and data retrieved from the table, what is the title of the information and a 1 to 2 paragraph summary of the table section.\n" +
+        "In your summary please be as specific as possible about what information is contained in the table, and cite specific names, numbers, dates and other unique items explicitly.\n" +
         "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
         "TITLE: <title of table section>\n" +
         "SUMMARY: <summary of table section>"
     );
 });
 
+
+export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNumber: number, markdownTable: string) => {
+
+    let pageSection: string; 
+    switch (sectionNumber) {
+        case 0:
+            pageSection = "top";
+            break;
+        case 1:
+            pageSection = "middle";
+            break;
+        case 2:
+            pageSection = "bottom";
+            break;
+        default:
+            pageSection = "unknown";
+    };
+
+    const pageDesc = `the ${pageSection} part of page ${pageNumber}`;
+
+
+
+    return PromptTemplate.fromTemplate(
+        `Below is a markdown formatted table of key value pairs in a form pulled from ${pageDesc} of a medical record using machine learning. The table contains the following columns:\n` +
+        "1. Key: The key of the key value pair\n" +
+        "2. Value: The value of the key value pair\n" +
+        "3. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 50% should be viewed very cautiously.\n" +
+        "4. Left: A percentage representing how far left on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
+        "5. Top: A percentage representing how far up on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
+        "6. Right: A percentage representing how far right on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
+        "7. Bottom: A percentage representing how far down on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
+        "\nBelow is the markdown table describing the key-value pair data on this part of the page:\n\n" +
+        markdownTable +
+        "\n\nGiven the above information about the text retrieved from the document, what is the title of the form section and a 1 to 2 paragraph summary of the form section.\n" +
+        "In your summary please be as specific as possible about what information is contained in the form section, and cite specific names, numbers, dates and other unique items explicitly.\n" +
+        "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
+        "TITLE: <title of form section>\n" +
+        "SUMMARY: <summary of form section>"
+    );
+});
 
 
 export const textMarkdownTableGenerator = ((columns: string[], data: (string | number)[][]) => {
@@ -263,6 +304,128 @@ export const tableMarkdownTableGenerator = ((columns: string[], data: Cell[], in
     return returnArray;
 
 });
+
+
+interface kvPair {
+    key: string;
+    value: string;
+    confidence: number;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+}
+
+export const kvMarkdownTableGenerator = ((columns: string[], data: kvPair[]) => {
+
+    // Filter any rows that have confidence less than KV_SUMMARY_CONFIDENCE_THRESHOLD
+    // Also filter out any rows that have a key that is a b;ank string or null
+    data = data.filter((row) => {
+        return row.confidence >= KV_SUMMARY_CONFIDENCE_THRESHOLD && row.key !== "" && row.key !== null;
+    });
+
+    // get the max length of each column
+    const columnWidths = columns.map((column, index) => {
+        let maxLength = column.length;
+        data.forEach((row) => {
+            switch (index) {
+                case 0:
+                    if (row.key.length > maxLength) maxLength = row.key.length;
+                    break;
+                case 1:
+                    if (row.value.length > maxLength) maxLength = row.value.length;
+                    break;
+                case 2:
+                    if (row.confidence.toFixed(4).length > maxLength) maxLength = row.confidence.toFixed(4).length;
+                    break;
+                case 3:
+                    if (row.left.toFixed(4).length > maxLength) maxLength = row.left.toFixed(4).length;
+                    break;
+                case 4:
+                    if (row.top.toFixed(4).length > maxLength) maxLength = row.top.toFixed(4).length;
+                    break;
+                case 5:
+                    if (row.right.toFixed(4).length > maxLength) maxLength = row.right.toFixed(4).length;
+                    break;
+                case 6:
+                    if (row.bottom.toFixed(4).length > maxLength) maxLength = row.bottom.toFixed(4).length;
+                    break;
+            }
+        });
+        return maxLength;
+    });
+
+    // initialize return array
+    const returnArray = [];
+
+    // loop over data and add text to the markdown array
+    // once text reaches MAX_PAGE_SUMMARY_TOKENS stop adding text to that array and push it to the return array
+    // then start a new array and repeat until all data has been added to the return array
+    // for a new array add the column headers and a row of dashes
+    // no need for a 20% overlap for KV pairs
+    while (data.length > 0) {
+        const currentArray = [];
+        let tokenCount = 0;
+        let left = 0;
+        let top = 0;
+        let right = 100;
+        let bottom = 100;
+
+        // Add table header
+        currentArray.push("| " + columns.map((column, index) => {
+            return column.padEnd(columnWidths[index], " ");
+        }).join(" | ") + " |");
+        tokenCount += getTokenCount(currentArray[0]);
+        currentArray.push("| " + columns.map((column, index) => {
+            return "-".repeat(columnWidths[index]);
+        }).join(" | ") + " |");
+        tokenCount += getTokenCount(currentArray[1]);
+
+        // Loop over data and start adding to the current array
+        let row: kvPair | undefined;
+        while (data.length > 0 && tokenCount < MAX_PAGE_SUMMARY_TOKENS) {
+            row = data.shift();
+            if (!row) break;
+            currentArray.push("| " + [row.key, row.value, row.confidence.toFixed(4), row.left.toFixed(4), row.top.toFixed(4), row.right.toFixed(4), row.bottom.toFixed(4)].map((val, index) => {
+                return val.padEnd(columnWidths[index], " ");
+            }).join(" | ") + " |");
+            // add the new token count
+            tokenCount += getTokenCount(currentArray[currentArray.length - 1]);
+            // update the bounding box
+            if (row.left < left) left = row.left;
+            if (row.top < top) top = row.top;
+            if (row.right > right) right = row.right;
+            if (row.bottom > bottom) bottom = row.bottom;
+        }
+
+        // If we went over the token count then remove the last row from the current array and add it back to data array
+        if (tokenCount > MAX_PAGE_SUMMARY_TOKENS) {
+            data.unshift(row!);
+            currentArray.pop();
+        }
+
+        returnArray.push({
+            text: currentArray.join("\n"),
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom
+        });
+        tokenCount = 0;
+        left = 0;
+        top = 0;
+        right = 100;
+        bottom = 100;
+    }
+
+    return returnArray;
+});
+
+
+
+
+
+
 
 
 

@@ -110,15 +110,30 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
             recordId,
         };
 
-        const { data, error } = await supabase.functions.invoke('process-page', {
-            body: JSON.stringify(requestBody),
-        });
-        if (error) {
-            console.log(error);
-            return;
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabase.functions.invoke('process-page', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
         }
-        console.log(`Page ${currentPage} text data sent to Supabase Edge Function`);
-        console.log(data);
 
         setUploadStage((prevState) => {
             const newState = [...prevState];
@@ -161,15 +176,30 @@ export const handleTableSummarySupabase = async (blocks, recordId, stage, setUpl
             recordId,
         };
 
-        const { data, error } = await supabase.functions.invoke('process-table', {
-            body: JSON.stringify(requestBody),
-        });
-        if (error) {
-            console.log(error);
-            return;
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabase.functions.invoke('process-table', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
         }
-        console.log(`Page ${currentPage} table data sent to Supabase Edge Function`);
-        console.log(data);
 
         setUploadStage((prevState) => {
             const newState = [...prevState];
@@ -194,6 +224,7 @@ export const handleKvSummarySupabase = async (blocks, recordId, stage, setUpload
 
         const preProcessedPageData = pageData.map((block) => {
             return {
+                page: block.page,
                 confidence: Math.min(block.keyConfidence, block.valueConfidence),
                 left: block.left,
                 top: block.top,
@@ -204,24 +235,36 @@ export const handleKvSummarySupabase = async (blocks, recordId, stage, setUpload
             };
         });
 
-        // Send page data and page id to Supabase Edge Function
+        // Send page data and record id to Supabase Edge Function
         const requestBody = {
             pageData: preProcessedPageData,
-            page: currentPage,
             recordId,
         };
 
-        console.log(requestBody);
-
-        const { data, error } = await supabase.functions.invoke('process-kv', {
-            body: JSON.stringify(requestBody),
-        });
-        if (error) {
-            console.log(error);
-            return;
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabase.functions.invoke('process-kv', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
         }
-        console.log(`Page ${currentPage} key-value data sent to Supabase Edge Function`);
-        console.log(data);
 
         setUploadStage((prevState) => {
             const newState = [...prevState];

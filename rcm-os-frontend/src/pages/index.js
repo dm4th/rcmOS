@@ -154,7 +154,7 @@ export default function Home() {
             kvBlocks[kvPage-1].push(returnKvBlocks[i]);
         }
 
-        // Step 4:
+        // Step 4: Async Execution
         setUploadStageSupabase((prevState) => {
             const newState = [...prevState];
             newState[1].active = true;
@@ -165,11 +165,11 @@ export default function Home() {
         await Promise.allSettled([
             handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase),
             handleTableSummarySupabase(tableBlocks, recordId, 2, setUploadStageSupabase),
-            // handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase),
+            handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase),
         ]).then((results) => {
             const textPromise = results[0];
             const tablePromise = results[1];
-            // const kvPromise = results[2];
+            const kvPromise = results[2];
 
             if (textPromise.status === 'fulfilled') {
                 setUploadStageSupabase((prevState) => {
@@ -187,14 +187,40 @@ export default function Home() {
                 });
             }
 
-            // if (kvPromise.status === 'fulfilled') {
-            //     setUploadStageSupabase((prevState) => {
-            //         const newState = [...prevState];
-            //         newState[3].progress = 100;
-            //         return newState;
-            //     });
-            // }
+            if (kvPromise.status === 'fulfilled') {
+                setUploadStageSupabase((prevState) => {
+                    const newState = [...prevState];
+                    newState[3].progress = 100;
+                    return newState;
+                });
+            }
         });
+
+        // Step 4: Sync Execution
+
+        // // Text
+        // setUploadStageSupabase((prevState) => {
+        //     const newState = [...prevState];
+        //     newState[1].active = true;
+        //     return newState;
+        // });
+        // await handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase);
+
+        // // Table
+        // setUploadStageSupabase((prevState) => {
+        //     const newState = [...prevState];
+        //     newState[2].active = true;
+        //     return newState;
+        // });
+        // await handleTableSummarySupabase(tableBlocks, recordId, 2, setUploadStageSupabase);
+
+        // // KV
+        // setUploadStageSupabase((prevState) => {
+        //     const newState = [...prevState];
+        //     newState[3].active = true;
+        //     return newState;
+        // });
+        // await handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase);
 
         // Change app state now that processing is done
         setAppStage('chat');

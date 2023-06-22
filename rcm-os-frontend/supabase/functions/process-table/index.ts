@@ -37,8 +37,9 @@ async function handler(req: Request) {
             modelName: "gpt-3.5-turbo",
         });
 
-        // Create insertRows array to store the new rows to be inserted into the database
+        // Create insertRows array to store the new rows to be inserted into the database and tablePromises array to hold LLM summary async promises
         const insertRows = [];
+        const tablePromises = [];
 
         // Loop over each table object in the pageData array and generate a summary and title for each table section using the LLM
         for (let i = 0; i < pageData.length; i++) {
@@ -60,7 +61,6 @@ async function handler(req: Request) {
             // Generate a markdown table describing the cells in the table
             const tableMarkdownArray = tableMarkdownTableGenerator(markdownHeaders, table.cells, tablePrompt);
 
-            const tableSections = [];
             // Loop over table sections and generate a summary for each
             for (let j = 0; j < tableMarkdownArray.length; j++) {
                 const tableSectionPrompt = tableSectionSummaryTemplate(tablePrompt, j, tableMarkdownArray[j]);
@@ -71,18 +71,19 @@ async function handler(req: Request) {
                     prompt: tableSectionPrompt,
                 });
 
-                // Run the LLM Chain
-                const llmOutput = await llmChain.call({});
-                const llmOutputText = llmOutput.text;
-
-                console.log(`Page ${pageNumber} Table ${i} Section ${j}\nOutput:\n${llmOutputText}`);
-
-                tableSections.push(llmOutputText);
+                // Add LLM Chain Run to Promises Array
+                tablePromises.push(llmChain.call({}));
             }
 
+            // Retrieve the LLM summarization results
+            const tableSummaries = await Promise.all(tablePromises);
+
             // loop over the table sections, embed the summary and write to the database
-            for (let j = 0; j < tableSections.length; j++) {
-                // Generate embedding for the page section summary
+            for (let j = 0; j < tableSummaries.length; j++) {
+                const tableSummaryText = tableSummaries[j].text;
+                console.log(`Page ${pageNumber} Table ${i} Section ${j}\nOutput:\n${tableSummaryText}`);
+
+                // Generate embedding for the table section summary
                 const embeddingUrl = "https://api.openai.com/v1/embeddings";
                 const embeddingHeaders = {
                     "Content-Type": "application/json",
@@ -90,7 +91,7 @@ async function handler(req: Request) {
                 };
 
                 const embeddingBody = JSON.stringify({
-                    "input": tableSections[j],
+                    "input": tableSummaryText,
                     "model": "text-embedding-ada-002",
                 });
 
@@ -103,8 +104,8 @@ async function handler(req: Request) {
                 const summaryEmbedding = embeddingJson.data[0].embedding;
 
                 // Generate the title and summary
-                const title = tableSections[j].split("TITLE:")[1].split("SUMMARY:")[0].trim();
-                const summary = tableSections[j].split("SUMMARY:")[1].trim();
+                const title = tableSummaryText.split("TITLE:")[1].split("SUMMARY:")[0].trim();
+                const summary = tableSummaryText.split("SUMMARY:")[1].trim();
 
                 insertRows.push({
                     "record_id": recordId,
