@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export const createFileSupabase = async (jobId, file, stage, setUploadStage) => {
+export const createFileSupabase = async (jobId, file, userId, stage, setUploadStage) => {
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -23,6 +23,16 @@ export const createFileSupabase = async (jobId, file, stage, setUploadStage) => 
     }
 
     if (data.length > 0) {
+        // If record is found, return the record id and reset all of the summary data in the page_summaries table
+        const { error: resetError } = await supabase
+            .from('page_summaries')
+            .delete()
+            .eq('record_id', data[0].id);
+        if (resetError) {
+            console.error(resetError);
+            return;
+        }
+
         setUploadStage((prevState) => {
             const newState = [...prevState];
             newState[stage].progress = 100;
@@ -32,7 +42,7 @@ export const createFileSupabase = async (jobId, file, stage, setUploadStage) => 
     }
 
     // upload file to supabase storage
-    const fileUrl = `records/${file.name}`;
+    const fileUrl = `records/${userId}/${file.name}`;
     const { error: uploadError } = await supabase.storage
         .from('records')
         .upload(fileUrl, file);
@@ -56,6 +66,7 @@ export const createFileSupabase = async (jobId, file, stage, setUploadStage) => 
         .from('medical_records')
         .insert([{ 
             textract_job_id: jobId,
+            user_id: userId,
             file_name: file.name,
             file_url: fileUrl,
         }])

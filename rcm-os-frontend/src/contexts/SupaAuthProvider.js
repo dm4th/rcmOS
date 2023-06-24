@@ -11,209 +11,190 @@ const SupaContextProvider = (props) => {
     const user = useUser();
     const accessToken = session?.access_token ?? null;
     const [isLoadingData, setIsloadingData] = useState(false);
-    const [userDetails, setUserDetails] = useState(null);
-    const [chatRole, setChatRole] = useState(null);
-    const [availableChatRoles, setAvailableChatRoles] = useState(null);
-    const [previousChats, setPreviousChats] = useState([]);
+    const [availableDocuments, setAvailableDocuments] = useState(null);
+    const [doc, setDoc] = useState(null);
+    const [availableChats, setAvailableChats] = useState(null);
     const [chat, setChat] = useState(null);
+    const [showLoginModal, setShowLoginModal] = useState(false);
 
-    const getUserDetails = () => 
+    const getAvailableDocs = () => 
         supabase
-            .from('profiles')
-            .select('username, full_name, avatar_url, email')
-            .eq('id', user.id)
-            .single();
-
-    const getChatRoles = () => 
-        supabase
-            .from('chat_roles')
-            .select('id, role')
+            .from('medical_records')
+            .select('id, file_name, content_embedding_progress')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
 
-    const getAnonRole = () => 
+    const getChats = (d) =>
         supabase
-            .from("chat_roles")
-            .select("id")
-            .eq("role", DEFAULT_ROLE)
-            .is("user_id", null)
-            .single();
-        
-    const initializeChatRole = (user_id) =>
-        supabase
-            .from('chat_roles')
-            .insert([{ user_id, role: DEFAULT_ROLE }])
-            .select();
-
-    const getPreviousChats = (role) =>
-        supabase
-            .from('chats')
+            .from('document_chats')
             .select('id, title')
-            .eq('role_id', role.id)
+            .eq('record_id', d.id)
+            .eq('user_id', user.id)
             .order('updated_at', { ascending: false });
 
-    const updateUserDetails = async () => {
+    const updateAvailableDocuments = async () => {
         if (!user) return;
         try {
-            const response = await getUserDetails();
-            setUserDetails(response.data);
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const updateAvailableChatRoles = async () => {
-        if (!user) return;
-        try {
-            const response = await getChatRoles();
+            const response = await getAvailableDocs();
             if (response.data.length > 0) {
-                // chat role(s) exist
-                const roles = response.data.map((role) => {
-                    return { role: role.role, id: role.id };
+                // doc(s) exist
+                const docs = response.data.map((d) => {
+                    return { file_name: d.file_name, id: d.id, progress: d.content_embedding_progress };
                 });
-                setAvailableChatRoles(roles);
+                setAvailableDocuments(docs);
             }
             else {
-                // no chat roles exist
-                setAvailableChatRoles(null);
+                // no docs exist
+                setAvailableDocuments(null);
             }
         } catch (error) {
             console.error(error);
         }
     };
 
-    const updateChatRole = async (role) => {
-        if (!user || !role) return;
-        let roleToUpdate = availableChatRoles.find((r) => r.role === role);
-        if (!roleToUpdate) {
-            // refresh available chat roles and try again
-            await updateAvailableChatRoles();
-            roleToUpdate = availableChatRoles.find((r) => r.role === role);
+    const changeDoc = async (docId) => {
+        if (!user || !docId) return;
+        let newDoc = availableDocuments.find((d) => d.id === docId);
+        if (!newDoc) {
+            // refresh available documents and try again
+            await updateAvailableDocuments();
+            newDoc = availableDocuments.find((d) => d.id === docId);
             // if still not found, return
-            if (!roleToUpdate) return;
+            if (!newDoc) return;
         }
-        setChatRole(roleToUpdate);
+        setDoc(newDoc);
     }
 
+    const updateAvailableChats = async () => {
+        if (!user || !doc) return;
+        try {
+            const response = await getChats(doc);
+            if (response.data.length > 0) {
+                // chat history(s) exist
+                const chats = response.data.map((chat) => {
+                    return { title: chat.title, id: chat.id };
+                });
+                setAvailableChats(chats);
+            }
+            else {
+                // no chat history(s) exist
+                setAvailableChats(null);
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const changeChat = async (chatId) => {
-        if (!chatId || chatId === '') setChat(null);
+        if (!user || !chatId || chatId === '') setChat(null);
         else {
-            const chat = previousChats.find((chat) => chat.id === chatId);
+            let newChat = availableChats.find((chat) => chat.id === chatId);
             if (!chat) {
                 // refresh previous chats and try again
-                Promise.allSettled([getPreviousChats(chatRole)]).then((results) => {
-                    const previousChatsPromise = results[0];
-                    if (previousChatsPromise.status === 'fulfilled') {
-                        const newPreviousChats = previousChatsPromise.value.data;
-                        setPreviousChats(newPreviousChats);
-                        setChat(newPreviousChats.find((chatValue) => chatValue.id === chatId));
-                    }
-                });
+                await updateAvailableChats();
+                newChat = availableChats.find((chat) => chat.id === chatId);
+                // if still not found, return
+                if (!newChat) return;
             }
-            setChat(chat);
+            setChat(newChat);
         };
     };
 
     const writeChatTitle = async (newTitle) => {
         if (chat.title === newTitle) return;
         const { data: chatTitleData, error: chatTitleError } = await supabase
-            .from('chats')
+            .from('document_chats')
             .update({ title: newTitle })
             .eq('id', chat.id)
             .select();
         if (chatTitleError) throw chatTitleError;
         // update previous chat history now with new title
-        const updatedPreviousChats = previousChats.map((chat) => {
+        const updatedAvailableChats = availableChats.map((chat) => {
             if (chat.id === chatTitleData[0].id) {
                 return { ...chat, title: chatTitleData[0].title };
             }
             return chat;
         });
-        setPreviousChats(updatedPreviousChats);
+        setAvailableChats(updatedAvailableChats);
         setChat({ ...chat, title: chatTitleData[0].title });
     };
 
+    const handleLogin = () => {
+        setShowLoginModal(true);
+    };
+
+    const handleCloseModal = () => {
+        setShowLoginModal(false);
+    };
+
+    useEffect(() => {
+        if (user) {
+            handleCloseModal();
+        }
+    }, [user]);
 
     useEffect(() => {
 
-        if (user && !isLoadingData && !userDetails) {
+        if (user && !isLoadingData) {
             // Login - get user details and chat history
             setIsloadingData(true);
-            Promise.allSettled([getUserDetails(), getChatRoles()]).then(
-                (results) => {
-                    const userDetailsPromise = results[0];
-                    const chatRolePromise = results[1];
-
-                    if (userDetailsPromise.status === 'fulfilled') 
-                        setUserDetails(userDetailsPromise.value.data);
-
-                    if (chatRolePromise.status === 'fulfilled') {
-                        if (chatRolePromise.value.data.length > 0) {
-                            // chat role(s) exist
-                            const roles = chatRolePromise.value.data.map((role) => {
-                                return { role: role.role, id: role.id };
-                            });
-                            setChatRole(roles[0]);
-                            setAvailableChatRoles(roles);
-                        }
-                        else {
-                            // Write intro role to DB for new user and set value to new role
-                            Promise.allSettled([initializeChatRole(user.id)]).then(
-                                (results) => {
-                                    const newRolePromise = results[0];
-                                    if (newRolePromise.status === 'fulfilled') {
-                                        setChatRole({ role: newRolePromise.value.data.role, id: newRolePromise.value.data.id });
-                                        setAvailableChatRoles([{ role: newRolePromise.value.data.role, id: newRolePromise.value.data.id }]);
-                                    }
-                                }
-                            );
-                        }
+            Promise.allSettled([updateAvailableDocuments()]).then((results) => {
+                const availableDocsPromise = results[0];
+                if (availableDocsPromise.status === 'fulfilled') {
+                    if (availableDocsPromise.value) {
+                        setDoc(availableDocsPromise.value[0]);
                     }
-
-                    setIsloadingData(false);
-                }
-            );
-        } else if (!user && !isLoadingUser && !isLoadingData) {
-            // Logout - reset state
-            setUserDetails(null);
-            Promise.allSettled([getAnonRole()]).then((results) => {
-                const anonRolePromise = results[0];
-                if (anonRolePromise.status === 'fulfilled') {
-                    setChatRole({ role: DEFAULT_ROLE, id: anonRolePromise.value.data.id });
                 }
             });
+            Promise.allSettled([updateAvailableChats()]).then((results) => {
+                const availableChatsPromise = results[0];
+                if (availableChatsPromise.status === 'fulfilled') {
+                    if (availableChatsPromise.value) {
+                        setChat(availableChatsPromise.value[0]);
+                    }
+                }
+            });
+            setIsloadingData(false);
+        } else if (!user && !isLoadingUser && !isLoadingData) {
+            // Logout - reset state
+            setAvailableDocuments(null);
+            setDoc(null);
+            setAvailableChats(null);
+            setChat(null);
         }
     }, [user, isLoadingUser]);
 
     useEffect(() => {
-        if (chatRole && user) {
-            Promise.allSettled([getPreviousChats(chatRole)]).then((results) => {
-                const previousChatsPromise = results[0];
-                if (previousChatsPromise.status === 'fulfilled' && previousChatsPromise.value.data) {
-                    setPreviousChats(previousChatsPromise.value.data);
+        if (doc && user) {
+            Promise.allSettled([updateAvailableChats()]).then((results) => {
+                const availableChatsPromise = results[0];
+                if (availableChatsPromise.status === 'fulfilled') {
+                    if (availableChatsPromise.value) {
+                        setChat(availableChatsPromise.value[0]);
+                    }
                 }
             });
         }
         else {
-            setPreviousChats([]);
+            setAvailableChats([]);
+            setChat(null);
         }
-        setChat(null);
-    }, [chatRole]);
+    }, [doc]);
 
     const value = {
         accessToken,
         user,
-        userDetails,
         isLoading: isLoadingUser || isLoadingData,
-        chatRole,
-        availableChatRoles,
-        previousChats,
+        availableDocuments,
+        doc,
+        availableChats,
         chat,
-        updateUserDetails,
-        updateChatRole,
-        updateAvailableChatRoles,
+        showLoginModal,
+        changeDoc,
         changeChat,
         writeChatTitle,
+        handleLogin,
+        handleCloseModal,
         supabaseClient: supabase,
     };
 

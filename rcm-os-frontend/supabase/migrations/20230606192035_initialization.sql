@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS "vector" WITH SCHEMA "public";
-
 -- Create PDF storage bucket
 INSERT INTO storage.buckets (id, name)
 VALUES ('records', 'Medical Records');
