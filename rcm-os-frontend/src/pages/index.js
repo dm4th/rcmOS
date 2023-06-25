@@ -6,8 +6,14 @@ import { CSSTransition } from 'react-transition-group';
 import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
 
+import { useSupaUser } from '@/contexts/SupaAuthProvider';
+
+// import { processFile } from '@/lib/fileProcessing.js';
+
 import { uploadFileAWS, pollJobAWS, getResultsAWS } from '@/lib/aws';
 import { createFileSupabase, handleTextSummarySupabase, handleTableSummarySupabase, handleKvSummarySupabase } from '@/lib/supabase';
+
+
 
 const awsProcessingStages = [
     { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
@@ -22,7 +28,11 @@ const supabaseProcessingStages = [
     { stage: 'Generating Key-Value Summaries & Embeddings', progress: 0, max: 100, active: false },
 ];
 
+
+
 export default function Home() {
+
+    const { user, supabaseClient } = useSupaUser();
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
 
@@ -78,15 +88,7 @@ export default function Home() {
 
         // Step 1:
         let awsStage = 0;
-        setUploadStageAWS((prevState) => {
-            const newState = [...prevState];
-            newState[awsStage].active = true;
-            return newState;
-        });
-        const jobId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
-
-        // Step 2:
-        awsStage = 1;
+        let recordId = null;
         setUploadStageAWS((prevState) => {
             const newState = [...prevState];
             newState[awsStage].active = true;
@@ -97,8 +99,6 @@ export default function Home() {
             newState[0].active = true;
             return newState;
         });
-
-        let recordId = null;
         await Promise.allSettled([
             pollJobAWS(jobId, awsStage, setUploadStageAWS),
             createFileSupabase(jobId, file, 0, setUploadStageSupabase)

@@ -1,10 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-
-export const createFileSupabase = async (jobId, file, userId, stage, setUploadStage) => {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+export const createFileSupabase = async (jobId, file, user, supabaseClient, stage, setUploadStage) => {
 
     // check if a record with this jobId already exists in the medical_records table
     // if so, set the id using setSupabaseId and return
@@ -13,7 +7,7 @@ export const createFileSupabase = async (jobId, file, userId, stage, setUploadSt
         // 2. create a new record and set the id using setSupabaseId
 
     // check for existing record
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('medical_records')
         .select('id')
         .eq('textract_job_id', jobId);
@@ -24,7 +18,7 @@ export const createFileSupabase = async (jobId, file, userId, stage, setUploadSt
 
     if (data.length > 0) {
         // If record is found, return the record id and reset all of the summary data in the page_summaries table
-        const { error: resetError } = await supabase
+        const { error: resetError } = await supabaseClient
             .from('page_summaries')
             .delete()
             .eq('record_id', data[0].id);
@@ -42,8 +36,8 @@ export const createFileSupabase = async (jobId, file, userId, stage, setUploadSt
     }
 
     // upload file to supabase storage
-    const fileUrl = `records/${userId}/${file.name}`;
-    const { error: uploadError } = await supabase.storage
+    const fileUrl = `records/${user.id}/${file.name}`;
+    const { error: uploadError } = await supabaseClient.storage
         .from('records')
         .upload(fileUrl, file);
     if (uploadError) {
@@ -62,13 +56,14 @@ export const createFileSupabase = async (jobId, file, userId, stage, setUploadSt
     });
 
     // create new record in medical_records table
-    const { data: insertData, error: insertError } = await supabase
+    const { data: insertData, error: insertError } = await supabaseClient
         .from('medical_records')
         .insert([{ 
             textract_job_id: jobId,
-            user_id: userId,
+            user_id: user.id,
             file_name: file.name,
             file_url: fileUrl,
+            content_embedding_progress: 0
         }])
         .select();
     if (insertError) {
@@ -83,11 +78,8 @@ export const createFileSupabase = async (jobId, file, userId, stage, setUploadSt
     return insertData[0].id;
 };
 
-export const handleTextSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+export const handleTextSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
+
     const totalPages = blocks[blocks.length - 1][0].Page;
     for (const pageData of blocks) {
         if (pageData.length === 0) {
@@ -125,7 +117,7 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
         let running = true;
         while (running) {
             try {
-                await supabase.functions.invoke('process-page', {
+                await supabaseClient.functions.invoke('process-page', {
                     body: JSON.stringify(requestBody),
                 });
                 running = false;
@@ -154,11 +146,8 @@ export const handleTextSummarySupabase = async (blocks, recordId, stage, setUplo
     }
 };
 
-export const handleTableSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+export const handleTableSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
+
     const totalPages = blocks.length;
     for (const pageData of blocks) {
         if (pageData.length === 0) {
@@ -191,7 +180,7 @@ export const handleTableSummarySupabase = async (blocks, recordId, stage, setUpl
         let running = true;
         while (running) {
             try {
-                await supabase.functions.invoke('process-table', {
+                await supabaseClient.functions.invoke('process-table', {
                     body: JSON.stringify(requestBody),
                 });
                 running = false;
@@ -220,11 +209,8 @@ export const handleTableSummarySupabase = async (blocks, recordId, stage, setUpl
     }
 };
 
-export const handleKvSummarySupabase = async (blocks, recordId, stage, setUploadStage) => {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+export const handleKvSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
+
     const totalPages = blocks.length;
     for (const pageData of blocks) {
         if (pageData.length === 0) {
@@ -256,7 +242,7 @@ export const handleKvSummarySupabase = async (blocks, recordId, stage, setUpload
         let running = true;
         while (running) {
             try {
-                await supabase.functions.invoke('process-kv', {
+                await supabaseClient.functions.invoke('process-kv', {
                     body: JSON.stringify(requestBody),
                 });
                 running = false;
