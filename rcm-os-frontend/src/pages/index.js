@@ -5,15 +5,11 @@ import { CSSTransition } from 'react-transition-group';
 
 import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
+import { Sidebar } from '@/components/Sidebar.js';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
-// import { processFile } from '@/lib/fileProcessing.js';
-
-import { uploadFileAWS, pollJobAWS, getResultsAWS } from '@/lib/aws';
-import { createFileSupabase, handleTextSummarySupabase, handleTableSummarySupabase, handleKvSummarySupabase } from '@/lib/supabase';
-
-
+import { processFile } from '@/lib/fileProcessing.js';
 
 const awsProcessingStages = [
     { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
@@ -32,7 +28,7 @@ const supabaseProcessingStages = [
 
 export default function Home() {
 
-    const { user, supabaseClient } = useSupaUser();
+    const { user, supabaseClient, updateAvailableDocuments, changeDoc, updateAvailableChats, changeChat } = useSupaUser();
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
 
@@ -40,11 +36,15 @@ export default function Home() {
     const [uploadStageAWS, setUploadStageAWS] = useState(awsProcessingStages);
     const [uploadStageSupabase, setUploadStageSupabase] = useState(supabaseProcessingStages);
 
-    const [supabaseId, setSupabaseId] = useState(null);
-
     useEffect(() => {
+        const processFileAsync = async () => {
+            // Helper function to go through each stage of the processing cycle
+            await processFile(file, user, supabaseClient, changeDoc, changeChat, setUploadStageAWS, setUploadStageSupabase);
+            setAppStage('chat');
+        };
+
         if (appStage === 'processing') {
-            processFile(file);
+            processFileAsync();
         } else {
             setUploadStageAWS(awsProcessingStages);
             setUploadStageSupabase(supabaseProcessingStages);
@@ -69,141 +69,10 @@ export default function Home() {
         setAppStage('processing');
     };
 
-    const processFile = async (file) => {
-        // Helper function to go through each stage of the processing cycle
-        // Some parts between AWS and SupaBase can be done in parallel
-
-        // Step 1:
-            // AWS: Upload file to S3 and begin Textract OCR Job
-        // Step 2: 
-            // AWS: Poll for completed Textract Job
-            // SupaBase: Uplpad file to SupaBase Storage, Create new record of pointer to storage & textract Job Id
-        // Step 3:
-            // AWS: Retrieve Processed Textract Job Blocks
-        // Step 4:
-            // SupaBase: Generate Section summaries for each page, upload summary & Embeddings to Supabase from text blocks
-            // SupaBase: Generate summaries for each table and page, upload summary & Embeddings to Supabase from analysis blocks
-            // SupaBase: Generate summaries for collections of Key-Value pairs on each page, upload summary & Embeddings to Supabase from analysis blocks
-
-
-        // Step 1:
-        let awsStage = 0;
-        const jobId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
-
-        let recordId = null;
-        setUploadStageAWS((prevState) => {
-            const newState = [...prevState];
-            newState[awsStage].active = true;
-            return newState;
-        });
-        setUploadStageSupabase((prevState) => {
-            const newState = [...prevState];
-            newState[0].active = true;
-            return newState;
-        });
-        await Promise.allSettled([
-            pollJobAWS(jobId, awsStage, setUploadStageAWS),
-            createFileSupabase(jobId, file, user, supabaseClient, 0, setUploadStageSupabase)
-        ]).then((results) => {
-            const pollPromise = results[0];
-            const filePromise = results[1];
-
-            if (pollPromise.status === 'fulfilled') {
-                const pages = pollPromise.value;
-                if (!pages) { 
-                    alert('Textract Error');
-                }
-            }
-
-            if (filePromise.status === 'fulfilled') {
-                setSupabaseId(filePromise.value);
-                recordId = filePromise.value;
-            }
-        });
-
-        if (!recordId) {
-            alert('Supabase Error');
-            return;
-        }
-
-        // Step 3: 
-        awsStage = 2;
-        setUploadStageAWS((prevState) => {
-            const newState = [...prevState];
-            newState[awsStage].active = true;
-            return newState;
-        });
-        // TODO: ASYNC FOR TEXT & DOC ANALYSIS CONCURRENCY
-        const { returnLineBlocks: textBlocks, returnTableBlocks, returnKvBlocks } = await getResultsAWS(jobId, awsStage, setUploadStageAWS);
-
-        // tableBlocks aleady set of as array of arrays (one inner array per page)
-        // Other blocks need to be converted to array of arrays, with one inner array containing all blocks for a given page
-        let tableBlocks = [];
-        for (var i = 0; i < returnTableBlocks.length; i++) {
-            const tablePage = returnTableBlocks[i].page;
-            while (tableBlocks.length < tablePage) {
-                tableBlocks.push([]);
-            }
-            tableBlocks[tablePage-1].push(returnTableBlocks[i]);
-        }
-
-        let kvBlocks = [];
-        for (var i = 0; i < returnKvBlocks.length; i++) {
-            const kvPage = returnKvBlocks[i].page;
-            while (kvBlocks.length < kvPage) {
-                kvBlocks.push([]);
-            }
-            kvBlocks[kvPage-1].push(returnKvBlocks[i]);
-        }
-
-        // Step 4: Async Execution
-        setUploadStageSupabase((prevState) => {
-            const newState = [...prevState];
-            newState[1].active = true;
-            newState[2].active = true;
-            newState[3].active = true;
-            return newState;
-        });
-        await Promise.allSettled([
-            handleTextSummarySupabase(textBlocks, recordId, supabaseClient, 1, setUploadStageSupabase),
-            handleTableSummarySupabase(tableBlocks, recordId, supabaseClient, 2, setUploadStageSupabase),
-            handleKvSummarySupabase(kvBlocks, recordId, supabaseClient, 3, setUploadStageSupabase),
-        ]).then((results) => {
-            const textPromise = results[0];
-            const tablePromise = results[1];
-            const kvPromise = results[2];
-
-            if (textPromise.status === 'fulfilled') {
-                setUploadStageSupabase((prevState) => {
-                    const newState = [...prevState];
-                    newState[1].progress = 100;
-                    return newState;
-                });
-            }
-
-            if (tablePromise.status === 'fulfilled') {
-                setUploadStageSupabase((prevState) => {
-                    const newState = [...prevState];
-                    newState[2].progress = 100;
-                    return newState;
-                });
-            }
-
-            if (kvPromise.status === 'fulfilled') {
-                setUploadStageSupabase((prevState) => {
-                    const newState = [...prevState];
-                    newState[3].progress = 100;
-                    return newState;
-                });
-            }
-        });
-
-        setAppStage('chat');
-
-    };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-white dark:bg-gray-900">
+        <div className="flex min-h-screen bg-white dark:bg-gray-900">
+            <Sidebar setAppStage={setAppStage}/>
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center">
                 {appStage === 'intro' && (
                     <CSSTransition

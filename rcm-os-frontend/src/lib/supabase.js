@@ -9,7 +9,7 @@ export const createFileSupabase = async (jobId, file, user, supabaseClient, stag
     // check for existing record
     const { data, error } = await supabaseClient
         .from('medical_records')
-        .select('id')
+        .select('id, file_name')
         .eq('textract_job_id', jobId);
     if (error) {
         alert(error);
@@ -32,7 +32,7 @@ export const createFileSupabase = async (jobId, file, user, supabaseClient, stag
             newState[stage].progress = 100;
             return newState;
         });
-        return data[0].id;
+        return data[0];
     }
 
     // upload file to supabase storage
@@ -75,7 +75,7 @@ export const createFileSupabase = async (jobId, file, user, supabaseClient, stag
         newState[stage].progress = 100;
         return newState;
     });
-    return insertData[0].id;
+    return insertData[0];
 };
 
 export const handleTextSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {

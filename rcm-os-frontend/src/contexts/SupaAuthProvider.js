@@ -30,7 +30,17 @@ const SupaContextProvider = (props) => {
             .select('id, title')
             .eq('record_id', d.id)
             .eq('user_id', user.id)
-            .order('updated_at', { ascending: false });
+            .order('created_at', { ascending: false });
+
+    const createNewChat = async (d) => 
+        supabase
+            .from('document_chats')
+            .insert([{
+                record_id: d.id,
+                user_id: user.id,
+                title: `Chat ${availableChats.length + 1}`,
+            }])
+            .select();
 
     const updateAvailableDocuments = async () => {
         if (!user) return;
@@ -42,10 +52,12 @@ const SupaContextProvider = (props) => {
                     return { file_name: d.file_name, id: d.id, progress: d.content_embedding_progress };
                 });
                 setAvailableDocuments(docs);
+                return docs;
             }
             else {
                 // no docs exist
                 setAvailableDocuments(null);
+                return null;
             }
         } catch (error) {
             console.error(error);
@@ -54,6 +66,10 @@ const SupaContextProvider = (props) => {
 
     const changeDoc = async (docId) => {
         if (!user || !docId) return;
+        if (docId === 'new') {
+            setDoc(null);
+            return;
+        }
         let newDoc = availableDocuments.find((d) => d.id === docId);
         if (!newDoc) {
             // refresh available documents and try again
@@ -75,10 +91,12 @@ const SupaContextProvider = (props) => {
                     return { title: chat.title, id: chat.id };
                 });
                 setAvailableChats(chats);
+                return chats;
             }
             else {
                 // no chat history(s) exist
                 setAvailableChats(null);
+                return null;
             }
         } catch (error) {
             console.error(error);
@@ -98,6 +116,16 @@ const SupaContextProvider = (props) => {
             }
             setChat(newChat);
         };
+    };
+
+    const newChat = async () => {
+        if (!user || !doc) return;
+        const { data: newChatData, error: newChatError } = await createNewChat(doc);
+        if (newChatError) throw newChatError;
+        // add the new chat to the top of available chats
+        const updatedAvailableChats = [{ title: newChatData[0].title, id: newChatData[0].id }, ...availableChats];
+        setAvailableChats(updatedAvailableChats);
+        setChat({ title: newChatData[0].title, id: newChatData[0].id });
     };
 
     const writeChatTitle = async (newTitle) => {
@@ -192,6 +220,7 @@ const SupaContextProvider = (props) => {
         showLoginModal,
         changeDoc,
         changeChat,
+        newChat,
         writeChatTitle,
         handleLogin,
         handleCloseModal,

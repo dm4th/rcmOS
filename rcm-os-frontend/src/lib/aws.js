@@ -4,7 +4,7 @@ import axios from 'axios';
 export const uploadFileAWS = async (file, stage, setUploadStage) => {
     if (!file) {
         // If no file is passed to the function, return hard-coded textract job id
-        const jobIds = "718c1ec60a49bbc6edabaacfe91981433f3d35f4c4e93d2fb154461af0eff036";
+        const jobIds = "5f6477ed184e93f8b18efeaa6d18867d4e2867e152b9f1f49ed86c3b950deaf9";
         setUploadStage((prevState) => {
             const newState = [...prevState];
             newState[stage].progress = 100;
