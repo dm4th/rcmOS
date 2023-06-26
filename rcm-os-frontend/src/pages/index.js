@@ -5,11 +5,12 @@ import { CSSTransition } from 'react-transition-group';
 
 import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
-import { Sidebar } from '@/components/Sidebar.js';
+import { Sidebar } from '@/components/Sidebar';
+import { ChatInterface } from '@/components/ChatInterface';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
-import { processFile } from '@/lib/fileProcessing.js';
+import { processFile } from '@/lib/fileProcessing';
 
 const awsProcessingStages = [
     { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
@@ -28,7 +29,7 @@ const supabaseProcessingStages = [
 
 export default function Home() {
 
-    const { user, supabaseClient, updateAvailableDocuments, changeDoc, updateAvailableChats, changeChat } = useSupaUser();
+    const { user, supabaseClient, changeDoc, chat, changeChat } = useSupaUser();
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
 
@@ -50,6 +51,12 @@ export default function Home() {
             setUploadStageSupabase(supabaseProcessingStages);
         }
     }, [appStage]);
+
+    useEffect(() => {
+        if (chat) {
+            setAppStage('chat');
+        }
+    }, [chat]);
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
@@ -101,9 +108,7 @@ export default function Home() {
                         classNames="slide-up"
                         unmountOnExit
                     >
-                        <div className="flex flex-col items-center justify-center mt-6">
-                            <p> Chat </p>
-                        </div>
+                        <ChatInterface />
                     </CSSTransition>
                 )}
             </main>
