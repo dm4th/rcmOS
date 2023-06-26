@@ -95,13 +95,26 @@ async function handler(req: Request) {
                     "model": "text-embedding-ada-002",
                 });
 
-                const embeddingResponse = await fetch(embeddingUrl, {
-                    method: "POST",
-                    headers: embeddingHeaders,
-                    body: embeddingBody
-                });
-                const embeddingJson = await embeddingResponse.json();
-                const summaryEmbedding = embeddingJson.data[0].embedding;
+                // loop until the embedding is generated
+                // if embeddingJson.data is undefined, then the embedding is not ready
+                let calculateEmbedding = true;
+                let summaryEmbedding;
+                while (calculateEmbedding) {
+                    const embeddingResponse = await fetch(embeddingUrl, {
+                        method: "POST",
+                        headers: embeddingHeaders,
+                        body: embeddingBody
+                    });
+                    const embeddingJson = await embeddingResponse.json();
+                    if (embeddingJson.data) {
+                        summaryEmbedding = embeddingJson.data[0].embedding;
+                        calculateEmbedding = false;
+                    } else {
+                        console.log("Embedding not ready yet, waiting 1 second...");
+                        console.log(embeddingResponse.status, embeddingResponse.statusText);
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
 
                 // Generate the title and summary
                 const title = tableSummaryText.split("TITLE:")[1].split("SUMMARY:")[0].trim();

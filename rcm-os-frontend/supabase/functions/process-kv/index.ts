@@ -71,6 +71,7 @@ async function handler(req: Request) {
         // Then embed each summary and add to an array to push all rows at once to the database
         const insertRows = [];
         const kvPromises = [];
+        const kvCoords = [];
 
         for (let i = 0; i < markdownArray.length; i++) {
             // skip empty sections
@@ -83,6 +84,15 @@ async function handler(req: Request) {
             // add them to insertRows array when finished
 
             for (let j = 0; j < kvMarkdownArray.length; j++) {
+                // push coordinates to kvCoords array
+                kvCoords.push({
+                    "left": kvMarkdownArray[j].left,
+                    "top": kvMarkdownArray[j].top,
+                    "right": kvMarkdownArray[j].right,
+                    "bottom": kvMarkdownArray[j].bottom,
+                });
+
+                // Generate the prompt for the LLM
                 const sectionPrompt = kvSectionSummaryTemplate(pageNumber, i, kvMarkdownArray[j].text);
 
                 // Create LLM Chain
@@ -100,6 +110,7 @@ async function handler(req: Request) {
 
             // Loop over the results and add them to the insertRows array
             for (let j = 0; j < kvResults.length; j++) {
+                const kvCoordinates = kvCoords[j];
                 const kvOutputText = kvResults[j].text;
 
                 console.log(`Page ${pageNumber} Section ${i}, ${j}\nOutput:\n${kvOutputText}`);
@@ -116,13 +127,26 @@ async function handler(req: Request) {
                     "model": "text-embedding-ada-002",
                 });
 
-                const embeddingResponse = await fetch(embeddingUrl, {
-                    method: "POST",
-                    headers: embeddingHeaders,
-                    body: embeddingBody
-                });
-                const embeddingJson = await embeddingResponse.json();
-                const summaryEmbedding = embeddingJson.data[0].embedding;
+                // loop until the embedding is generated
+                // if embeddingJson.data is undefined, then the embedding is not ready
+                let calculateEmbedding = true;
+                let summaryEmbedding;
+                while (calculateEmbedding) {
+                    const embeddingResponse = await fetch(embeddingUrl, {
+                        method: "POST",
+                        headers: embeddingHeaders,
+                        body: embeddingBody
+                    });
+                    const embeddingJson = await embeddingResponse.json();
+                    if (embeddingJson.data) {
+                        summaryEmbedding = embeddingJson.data[0].embedding;
+                        calculateEmbedding = false;
+                    } else {
+                        console.log("Embedding not ready yet, waiting 1 second...");
+                        console.log(embeddingResponse.status, embeddingResponse.statusText);
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
 
                 // Generate the title and summary
                 const title = kvOutputText.split("TITLE:")[1].split("SUMMARY:")[0].trim();
@@ -136,10 +160,10 @@ async function handler(req: Request) {
                     "title": title,
                     "summary": summary,
                     "summary_embedding": summaryEmbedding,
-                    "left": kvMarkdownArray[j].left,
-                    "top": kvMarkdownArray[j].top,
-                    "right": kvMarkdownArray[j].right,
-                    "bottom": kvMarkdownArray[j].bottom,
+                    "left": kvCoordinates.left,
+                    "top": kvCoordinates.top,
+                    "right": kvCoordinates.right,
+                    "bottom": kvCoordinates.bottom,
                     "section_type": "key-value",
                     "sub_section_number": j,
                 });

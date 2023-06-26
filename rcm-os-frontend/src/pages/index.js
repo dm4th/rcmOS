@@ -88,6 +88,8 @@ export default function Home() {
 
         // Step 1:
         let awsStage = 0;
+        const jobId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
+
         let recordId = null;
         setUploadStageAWS((prevState) => {
             const newState = [...prevState];
@@ -101,7 +103,7 @@ export default function Home() {
         });
         await Promise.allSettled([
             pollJobAWS(jobId, awsStage, setUploadStageAWS),
-            createFileSupabase(jobId, file, 0, setUploadStageSupabase)
+            createFileSupabase(jobId, file, user, supabaseClient, 0, setUploadStageSupabase)
         ]).then((results) => {
             const pollPromise = results[0];
             const filePromise = results[1];
@@ -163,9 +165,9 @@ export default function Home() {
             return newState;
         });
         await Promise.allSettled([
-            handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase),
-            handleTableSummarySupabase(tableBlocks, recordId, 2, setUploadStageSupabase),
-            handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase),
+            handleTextSummarySupabase(textBlocks, recordId, supabaseClient, 1, setUploadStageSupabase),
+            handleTableSummarySupabase(tableBlocks, recordId, supabaseClient, 2, setUploadStageSupabase),
+            handleKvSummarySupabase(kvBlocks, recordId, supabaseClient, 3, setUploadStageSupabase),
         ]).then((results) => {
             const textPromise = results[0];
             const tablePromise = results[1];
@@ -196,33 +198,6 @@ export default function Home() {
             }
         });
 
-        // Step 4: Sync Execution
-
-        // // Text
-        // setUploadStageSupabase((prevState) => {
-        //     const newState = [...prevState];
-        //     newState[1].active = true;
-        //     return newState;
-        // });
-        // await handleTextSummarySupabase(textBlocks, recordId, 1, setUploadStageSupabase);
-
-        // // Table
-        // setUploadStageSupabase((prevState) => {
-        //     const newState = [...prevState];
-        //     newState[2].active = true;
-        //     return newState;
-        // });
-        // await handleTableSummarySupabase(tableBlocks, recordId, 2, setUploadStageSupabase);
-
-        // // KV
-        // setUploadStageSupabase((prevState) => {
-        //     const newState = [...prevState];
-        //     newState[3].active = true;
-        //     return newState;
-        // });
-        // await handleKvSummarySupabase(kvBlocks, recordId, 3, setUploadStageSupabase);
-
-        // Change app state now that processing is done
         setAppStage('chat');
 
     };
@@ -230,38 +205,38 @@ export default function Home() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen py-2 bg-white dark:bg-gray-900">
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center">
-            {appStage === 'intro' && (
-                <CSSTransition
-                    in={appStage === 'intro'}
-                    timeout={300}
-                    classNames="slide-up"
-                    unmountOnExit
-                >
-                    <Intro handleFileChange={handleFileChange} handleFileDrop={handleFileDrop} handleTestingButtonClick={handleTestingButtonClick} />
-                </CSSTransition>
-            )}
-            {appStage === 'processing' && (
-                <CSSTransition
-                    in={appStage === 'processing'}
-                    timeout={300}
-                    classNames="slide-up"
-                    unmountOnExit
-                >
-                    <Processing uploadStageAWS={uploadStageAWS} uploadStageSupabase={uploadStageSupabase} />
-                </CSSTransition>
-            )}
-            {appStage === 'chat' && (
-                <CSSTransition
-                    in={appStage === 'chat'}
-                    timeout={300}
-                    classNames="slide-up"
-                    unmountOnExit
-                >
-                    <div className="flex flex-col items-center justify-center mt-6">
-                        <p> Chat </p>
-                    </div>
-                </CSSTransition>
-            )}
+                {appStage === 'intro' && (
+                    <CSSTransition
+                        in={appStage === 'intro'}
+                        timeout={300}
+                        classNames="slide-up"
+                        unmountOnExit
+                    >
+                        <Intro handleFileChange={handleFileChange} handleFileDrop={handleFileDrop} handleTestingButtonClick={handleTestingButtonClick} />
+                    </CSSTransition>
+                )}
+                {appStage === 'processing' && (
+                    <CSSTransition
+                        in={appStage === 'processing'}
+                        timeout={300}
+                        classNames="slide-up"
+                        unmountOnExit
+                    >
+                        <Processing uploadStageAWS={uploadStageAWS} uploadStageSupabase={uploadStageSupabase} />
+                    </CSSTransition>
+                )}
+                {appStage === 'chat' && (
+                    <CSSTransition
+                        in={appStage === 'chat'}
+                        timeout={300}
+                        classNames="slide-up"
+                        unmountOnExit
+                    >
+                        <div className="flex flex-col items-center justify-center mt-6">
+                            <p> Chat </p>
+                        </div>
+                    </CSSTransition>
+                )}
             </main>
         </div>
     )
