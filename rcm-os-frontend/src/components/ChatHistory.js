@@ -42,22 +42,19 @@ export function ChatHistory ({ messages, latestUserMessage, latestResponse }) {
     const latestMessageDisp = () => {
         if (latestUserMessage === '') return null;
         return (
-            <div className={styles.convoBlock}>
+            <div className="relative mb-1 p-2 border-2 border-gray-700 dark:border-gray-400 rounded-md text-gray-900 dark:text-gray-100">
                 {userMessageDisp(latestUserMessage, 'u')}
                 {botMessageDisp(latestResponse, 'm')}
             </div>
         );
     }
 
-    // if (messages.length === 0) and latestUserMessage is an empty string return null;
-    if (messages.length === 0 && latestUserMessage === '') return null;
-
     return (
-        <div className={styles.convoHistoryContainer}>
-            <h2 className={utilStyles.headingLg}>Chat History</h2>
+        <div className='w-full p-4 border-2 rounded border-gray-800 dark:border-gray-300 bg-gray-100 dark:bg-gray-800'>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">Chat History</h3>
             {latestMessageDisp()}
             {messages.slice().reverse().map((message, index) => (
-                <div key={`c-${index}`} className={styles.convoBlock}>
+                <div key={`c-${index}`} className="relative mb-1 p-2 border-2 border-gray-700 dark:border-gray-400 rounded-md text-gray-900 dark:text-gray-100">
                     {userMessageDisp(message.user.text, `u-${index}`)}
                     {botMessageDisp(message.model.text, `m-${index}`)}
                 </div>

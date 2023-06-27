@@ -118,12 +118,14 @@ export function ChatInterface({ }) {
     }, [chat]);
 
     return (
-        <div className="flex h-full">
-            <div className="flex flex-col w-1/2 h-full p-4">
+        <div className="flex h-full w-full">
+            <div className="flex flex-col w-2/5 h-full p-4 mt-4">
                 <ChatBox onUserInput={onUserInput} />
-                <ChatHistory messages={messages} latestUserMessage={latestUserMessage} latestResponse={latestResponse} />
+                <div className="mt-4 overflow-auto">
+                    <ChatHistory messages={messages} latestUserMessage={latestUserMessage} latestResponse={latestResponse} />
+                </div>
             </div>
-            <div className="flex flex-col w-1/2 h-full">
+            <div className="flex flex-col justify-center w-3/5 h-full">
                 <CitationViewer citation={citation} />
             </div>
         </div>

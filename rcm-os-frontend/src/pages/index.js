@@ -53,6 +53,12 @@ export default function Home() {
     }, [appStage]);
 
     useEffect(() => {
+        if (!user) {
+            setAppStage('intro');
+        }
+    }, [user]);
+
+    useEffect(() => {
         if (chat) {
             setAppStage('chat');
         }
