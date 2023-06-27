@@ -1,5 +1,8 @@
 import GPT3Tokenizer from 'https://esm.sh/gpt3-tokenizer';
-import { PromptTemplate } from "https://esm.sh/langchain/prompts";
+import { HumanMessagePromptTemplate, SystemMessagePromptTemplate, PromptTemplate } from "https://esm.sh/langchain/prompts";
+
+const MAX_CITATION_TOKENS = 2500;
+const MAX_CHAT_HISTORY_TOKENS = 500;
 
 const MAX_PAGE_SUMMARY_TOKENS = 3000;
 const PAGE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
@@ -7,6 +10,101 @@ const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 const KV_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
+
+export const chatRolePrompt = SystemMessagePromptTemplate.fromTemplate(
+    "You are a knowledgeable, intelligent assistant helping the user understand a questions they have about a medical record. " +
+    "Your goal is to provide a summary of cited passages that contextually fit with the user's prompt (shared below). " +
+    "You can use the chat history (also shared below) to help you understand the context of the user's prompt. Please focus on summarizing the cited information first and foremost though. " +
+    "You may not make up any information that is not explicitly stated in the cited passages. " +
+    "If no cited information is given, respond to the user's query letting them know that you do not know how to respond to their query. "
+);
+
+interface ChatHistory {
+    prompt: string;
+    response: string;
+}
+
+export const chatHistoryTemplate = ((chatHistory: ChatHistory[]) => {
+    if (chatHistory.length === 0) {
+        return SystemMessagePromptTemplate.fromTemplate(
+            "There is no chat history yet. Simply focus on summarizing the cited information."
+        );
+    }
+
+    const chatHistoryStart = "CHAT HISTORY:\n\n"
+    const chatHistoryEnd = "When you respond it is very important to not include the prompt or the preceding text 'RESPONSE: '. Simply add your response as if you were in normal conversation.\n\n";
+    let tokenCount = gpt3Tokenizer.encode(chatHistoryStart + chatHistoryEnd).length;
+    let chatHistoryString = "";
+    for (let i = 0; i < chatHistory.length; i++) {
+        const chatHistoryItem = chatHistory[i];
+        const chatHistoryItemString = `PROMPT: ${chatHistoryItem.prompt}\nRESPONSE: ${chatHistoryItem.response}\n\n`;
+        tokenCount += gpt3Tokenizer.encode(chatHistoryItemString).length;
+        if (tokenCount > MAX_CHAT_HISTORY_TOKENS) {
+            break;
+        }
+        chatHistoryString = chatHistoryItemString + chatHistoryString;
+    }
+
+    return SystemMessagePromptTemplate.fromTemplate(
+        chatHistoryStart + chatHistoryString + chatHistoryEnd
+    );
+});
+
+interface Citation {
+    type: string;
+    page: number;
+    title: string;
+    summary: string;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    similarity: number;
+}
+
+export const documentCitationTemplate = ((citations: Citation[]) => {
+    if (citations.length === 0) {
+        return SystemMessagePromptTemplate.fromTemplate(
+            "No relevant information was found. Please alert the user to this fact and kindly ask them to ask a more relevant question."
+        );
+    }
+
+    const citationsStart = "CITATIONS:\n\n"
+    let tokenCount = gpt3Tokenizer.encode(citationsStart).length;
+    let citationsString = "";
+    for (let i = 0; i < citations.length; i++) {
+        const citation = citations[i];
+
+        let citationStrength = "weak";
+        if (citation.similarity > 0.82) {
+            citationStrength = "strong";
+        }
+        else if (citation.similarity > 0.79) {
+            citationStrength = "good";
+        }
+        else if (citation.similarity > 0.76) {
+            citationStrength = "moderate";
+        }
+
+        const citationItemString = `Citation ${i + 1}:\n` +
+            `Type: ${citation.type}\n` +
+            `Page: ${citation.page}\n` +
+            `Title: ${citation.title}\n` +
+            `Summary: ${citation.summary}\n` +
+            `Similarity: ${citation.similarity} - ${citationStrength}\n`;
+        tokenCount += gpt3Tokenizer.encode(citationItemString).length;
+        if (tokenCount > MAX_CITATION_TOKENS) {
+            break;
+        }
+        citationsString += citationItemString + "\n";
+    }
+
+    return SystemMessagePromptTemplate.fromTemplate(
+        citationsStart + citationsString
+    );
+});
+
+export const humanMessageTemplate = HumanMessagePromptTemplate.fromTemplate("USER PROMPT: {human_prompt}");
 
 export const pageSectionSummaryTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string) => {
 
@@ -366,10 +464,10 @@ export const kvMarkdownTableGenerator = ((columns: string[], data: kvPair[]) => 
     while (data.length > 0) {
         const currentArray = [];
         let tokenCount = 0;
-        let left = 0;
-        let top = 0;
-        let right = 100;
-        let bottom = 100;
+        let left = 100;
+        let top = 100;
+        let right = 0;
+        let bottom = 0;
 
         // Add table header
         currentArray.push("| " + columns.map((column, index) => {

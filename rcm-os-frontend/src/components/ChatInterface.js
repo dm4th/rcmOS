@@ -20,7 +20,8 @@ export function ChatInterface({ }) {
     const [messages, setMessages] = useState([]);
     const [latestUserMessage, setLatestUserMessage] = useState('');
     const [latestResponse, setLatestResponse] = useState('');
-    const [citation, setCitation] = useState(null);
+    const [latestMessageId, setLatestMessageId] = useState(null);
+    const [selectedMessage, setSelectedMessage] = useState(null);
 
     const onUserInput = async (userPrompt) => {
         setMessages((prevMessages) => [
@@ -28,17 +29,20 @@ export function ChatInterface({ }) {
             {
                 prompt: latestUserMessage,
                 response: latestResponse,
-                citations: citation,
+                messageId: latestMessageId,
             }
         ]);
         setLatestUserMessage(userPrompt);
         setLatestResponse('');
+        setLatestMessageId(null);
 
         // Send user input to backend
-        const chatUrl = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL + 'chat';
+        const chatUrl = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL + 'document-chat';
         const postData = JSON.stringify({
             prompt: userPrompt,
-            chatId: chat.id,
+            chat_id: chat.id,
+            record_id: doc.id,
+            user_id: user.id,
         });
         await fetchEventSource(chatUrl, {
             method: 'POST',
@@ -50,8 +54,9 @@ export function ChatInterface({ }) {
             body: postData,
             onmessage: (event) => {
                 const data = JSON.parse(event.data);
-                if (data.citation) {
-                    setCitation(data.citation);
+                if (data.history_id) {
+                    setLatestMessageId(data.history_id);
+                    setSelectedMessage(data.history_id);
                 }
                 if (data.token) {
                     setLatestResponse((t) => t + data.token);
@@ -65,7 +70,8 @@ export function ChatInterface({ }) {
             setMessages([]);
             setLatestUserMessage('');
             setLatestResponse('');
-            setCitation(null);
+            setLatestMessageId(null);
+            setSelectedMessage(null);
             return;
         }
 
@@ -83,34 +89,22 @@ export function ChatInterface({ }) {
                     setMessages([]);
                     setLatestUserMessage('');
                     setLatestResponse('');
-                    setCitation(null);
+                    setLatestMessageId(null);
+                    setSelectedMessage(null);
                 }
                 else {
                     const messageArray = messages.map((m) => {
                         return {
                             prompt: m.prompt,
                             response: m.response,
-                            citation: {
-                                url: doc.file_url,
-                                page: m.citation_page,
-                                left: m.citation_left,
-                                top: m.citation_top,
-                                right: m.citation_right,
-                                bottom: m.citation_bottom,
-                            }
+                            messageId: m.id
                         }
                     });
                     setMessages(messageArray.slice(1).reverse());
                     setLatestUserMessage(messages[0].prompt);
                     setLatestResponse(messages[0].response);
-                    setCitation({
-                        url: doc.file_url,
-                        page: messages[0].citation_page,
-                        left: messages[0].citation_left,
-                        top: messages[0].citation_top,
-                        right: messages[0].citation_right,
-                        bottom: messages[0].citation_bottom,
-                    });
+                    setLatestMessageId(messages[0].id);
+                    setSelectedMessage(messages[0].id);
                 }
             }
         }
@@ -122,11 +116,11 @@ export function ChatInterface({ }) {
             <div className="flex flex-col w-2/5 h-full p-4 mt-4">
                 <ChatBox onUserInput={onUserInput} />
                 <div className="mt-4 overflow-auto">
-                    <ChatHistory messages={messages} latestUserMessage={latestUserMessage} latestResponse={latestResponse} />
+                    <ChatHistory messages={messages} latestUserMessage={latestUserMessage} latestResponse={latestResponse} latestMessageId={latestMessageId} selectedMessage={selectedMessage} changeMessage={setSelectedMessage} />
                 </div>
             </div>
             <div className="flex flex-col justify-center w-3/5 h-full">
-                <CitationViewer citation={citation} />
+                <CitationViewer selectedMessage={selectedMessage} />
             </div>
         </div>
     );

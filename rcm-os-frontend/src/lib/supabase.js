@@ -36,7 +36,7 @@ export const createFileSupabase = async (jobId, file, user, supabaseClient, stag
     }
 
     // upload file to supabase storage
-    const fileUrl = `records/${user.id}/${file.name}`;
+    const fileUrl = `${user.id}/${file.name}`;
     const { error: uploadError } = await supabaseClient.storage
         .from('records')
         .upload(fileUrl, file);

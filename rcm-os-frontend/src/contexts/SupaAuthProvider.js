@@ -11,16 +11,17 @@ const SupaContextProvider = (props) => {
     const user = useUser();
     const accessToken = session?.access_token ?? null;
     const [isLoadingData, setIsloadingData] = useState(false);
-    const [availableDocuments, setAvailableDocuments] = useState(null);
+    const [availableDocuments, setAvailableDocuments] = useState([]);
     const [doc, setDoc] = useState(null);
-    const [availableChats, setAvailableChats] = useState(null);
+    const [file, setFile] = useState(null);
+    const [availableChats, setAvailableChats] = useState([]);
     const [chat, setChat] = useState(null);
     const [showLoginModal, setShowLoginModal] = useState(false);
 
     const getAvailableDocs = () => 
         supabase
             .from('medical_records')
-            .select('id, file_name, content_embedding_progress')
+            .select('id, file_name, file_url, content_embedding_progress')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
 
@@ -49,14 +50,14 @@ const SupaContextProvider = (props) => {
             if (response.data.length > 0) {
                 // doc(s) exist
                 const docs = response.data.map((d) => {
-                    return { file_name: d.file_name, id: d.id, progress: d.content_embedding_progress };
+                    return { file_name: d.file_name, id: d.id, progress: d.content_embedding_progress, url: d.file_url };
                 });
                 setAvailableDocuments(docs);
                 return docs;
             }
             else {
                 // no docs exist
-                setAvailableDocuments(null);
+                setAvailableDocuments([]);
                 return null;
             }
         } catch (error) {
@@ -81,6 +82,22 @@ const SupaContextProvider = (props) => {
         setDoc(newDoc);
     }
 
+    const getFileUrl = async () => {
+        // store PDF file in state for rendering in PDF viewer
+        if (!user || !doc) return;
+        try {
+            const { data: fileData, error: fileError } = await supabase
+                .storage
+                .from('records')
+                .getPublicUrl(doc.url);
+            if (fileError) throw fileError;
+            const fileUrl = fileData.publicUrl;
+            return fileUrl;
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const updateAvailableChats = async () => {
         if (!user || !doc) return;
         try {
@@ -95,7 +112,7 @@ const SupaContextProvider = (props) => {
             }
             else {
                 // no chat history(s) exist
-                setAvailableChats(null);
+                setAvailableChats([]);
                 return null;
             }
         } catch (error) {
@@ -185,29 +202,36 @@ const SupaContextProvider = (props) => {
             setIsloadingData(false);
         } else if (!user && !isLoadingUser && !isLoadingData) {
             // Logout - reset state
-            setAvailableDocuments(null);
+            setAvailableDocuments([]);
             setDoc(null);
-            setAvailableChats(null);
+            setAvailableChats([]);
             setChat(null);
         }
     }, [user, isLoadingUser]);
 
     useEffect(() => {
         if (doc && user) {
-            Promise.allSettled([updateAvailableChats()]).then((results) => {
-                const availableChatsPromise = results[0];
-                if (availableChatsPromise.status === 'fulfilled') {
-                    if (availableChatsPromise.value) {
-                        setChat(availableChatsPromise.value[0]);
-                    }
+            const fetchChatsAndFile = async () => {
+                const chats = await updateAvailableChats();
+                const fileUrl = await getFileUrl();
+    
+                if (chats) {
+                    setChat(chats[0]);
                 }
-            });
+    
+                if (fileUrl) {
+                    setFile(fileUrl);
+                }
+            };
+    
+            fetchChatsAndFile();
         }
         else {
             setAvailableChats([]);
             setChat(null);
         }
     }, [doc]);
+    
 
     const value = {
         accessToken,
@@ -215,6 +239,7 @@ const SupaContextProvider = (props) => {
         isLoading: isLoadingUser || isLoadingData,
         availableDocuments,
         doc,
+        file,
         availableChats,
         chat,
         showLoginModal,

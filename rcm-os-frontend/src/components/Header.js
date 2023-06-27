@@ -23,11 +23,11 @@ export function Header() {
     );
 
     return (
-        <header className="flex justify-between items-center p-4 bg-gray-800 dark:bg-gray-200">
+        <header className="flex justify-between items-center p-4 border-b-2 border-gray-800 dark:border-gray-300 bg-gray-200 dark:bg-gray-800">
             {userButton}
             <div>
-                <label className="text-white dark:text-gray-900">
-                    <input type="checkbox" checked={theme === 'dark'} onChange={toggleTheme} />
+                <label className="text-gray-900 dark:text-white">
+                    <input type="checkbox" checked={theme === 'dark'} onChange={toggleTheme} className="m-2" />
                     Dark Mode
                 </label>
             </div>

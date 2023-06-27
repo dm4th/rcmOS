@@ -20,10 +20,16 @@ export const processFile = async (file, user, supabaseClient, changeDoc, changeC
 
     // Step 1:
     let awsStage = 0;
+    setUploadStageAWS((prevState) => {
+        const newState = [...prevState];
+        newState[awsStage].active = true;
+        return newState;
+    });
     const jobId = await uploadFileAWS(file, awsStage, setUploadStageAWS);
 
+    // Step 2:
     let recordId = null;
-    let fileName = null;
+    awsStage = 1;
     setUploadStageAWS((prevState) => {
         const newState = [...prevState];
         newState[awsStage].active = true;
@@ -50,7 +56,6 @@ export const processFile = async (file, user, supabaseClient, changeDoc, changeC
 
         if (filePromise.status === 'fulfilled') {
             recordId = filePromise.value.id;
-            fileName = filePromise.value.file_name;
         }
     });
 
@@ -60,76 +65,76 @@ export const processFile = async (file, user, supabaseClient, changeDoc, changeC
     }
 
     // Step 3: 
-    // awsStage = 2;
-    // setUploadStageAWS((prevState) => {
-    //     const newState = [...prevState];
-    //     newState[awsStage].active = true;
-    //     return newState;
-    // });
-    // // TODO: ASYNC FOR TEXT & DOC ANALYSIS CONCURRENCY
-    // const { returnLineBlocks: textBlocks, returnTableBlocks, returnKvBlocks } = await getResultsAWS(jobId, awsStage, setUploadStageAWS);
+    awsStage = 2;
+    setUploadStageAWS((prevState) => {
+        const newState = [...prevState];
+        newState[awsStage].active = true;
+        return newState;
+    });
+    // TODO: ASYNC FOR TEXT & DOC ANALYSIS CONCURRENCY
+    const { returnLineBlocks: textBlocks, returnTableBlocks, returnKvBlocks } = await getResultsAWS(jobId, awsStage, setUploadStageAWS);
 
-    // // tableBlocks aleady set of as array of arrays (one inner array per page)
-    // // Other blocks need to be converted to array of arrays, with one inner array containing all blocks for a given page
-    // let tableBlocks = [];
-    // for (var i = 0; i < returnTableBlocks.length; i++) {
-    //     const tablePage = returnTableBlocks[i].page;
-    //     while (tableBlocks.length < tablePage) {
-    //         tableBlocks.push([]);
-    //     }
-    //     tableBlocks[tablePage-1].push(returnTableBlocks[i]);
-    // }
+    // tableBlocks aleady set of as array of arrays (one inner array per page)
+    // Other blocks need to be converted to array of arrays, with one inner array containing all blocks for a given page
+    const tableBlocks = [];
+    for (let i = 0; i < returnTableBlocks.length; i++) {
+        const tablePage = returnTableBlocks[i].page;
+        while (tableBlocks.length < tablePage) {
+            tableBlocks.push([]);
+        }
+        tableBlocks[tablePage-1].push(returnTableBlocks[i]);
+    }
 
-    // let kvBlocks = [];
-    // for (var i = 0; i < returnKvBlocks.length; i++) {
-    //     const kvPage = returnKvBlocks[i].page;
-    //     while (kvBlocks.length < kvPage) {
-    //         kvBlocks.push([]);
-    //     }
-    //     kvBlocks[kvPage-1].push(returnKvBlocks[i]);
-    // }
+    const kvBlocks = [];
+    for (let i = 0; i < returnKvBlocks.length; i++) {
+        const kvPage = returnKvBlocks[i].page;
+        while (kvBlocks.length < kvPage) {
+            kvBlocks.push([]);
+        }
+        kvBlocks[kvPage-1].push(returnKvBlocks[i]);
+    }
 
-    // // Step 4: Async Execution
-    // setUploadStageSupabase((prevState) => {
-    //     const newState = [...prevState];
-    //     newState[1].active = true;
-    //     newState[2].active = true;
-    //     newState[3].active = true;
-    //     return newState;
-    // });
-    // await Promise.allSettled([
-    //     handleTextSummarySupabase(textBlocks, recordId, supabaseClient, 1, setUploadStageSupabase),
-    //     handleTableSummarySupabase(tableBlocks, recordId, supabaseClient, 2, setUploadStageSupabase),
-    //     handleKvSummarySupabase(kvBlocks, recordId, supabaseClient, 3, setUploadStageSupabase),
-    // ]).then((results) => {
-    //     const textPromise = results[0];
-    //     const tablePromise = results[1];
-    //     const kvPromise = results[2];
+    // Step 4: Async Execution
+    setUploadStageSupabase((prevState) => {
+        const newState = [...prevState];
+        newState[1].active = true;
+        newState[2].active = true;
+        newState[3].active = true;
+        return newState;
+    });
+    await Promise.allSettled([
+        handleTextSummarySupabase(textBlocks, recordId, supabaseClient, 1, setUploadStageSupabase),
+        handleTableSummarySupabase(tableBlocks, recordId, supabaseClient, 2, setUploadStageSupabase),
+        handleKvSummarySupabase(kvBlocks, recordId, supabaseClient, 3, setUploadStageSupabase),
+    ]).then((results) => {
+        const textPromise = results[0];
+        const tablePromise = results[1];
+        const kvPromise = results[2];
 
-    //     if (textPromise.status === 'fulfilled') {
-    //         setUploadStageSupabase((prevState) => {
-    //             const newState = [...prevState];
-    //             newState[1].progress = 100;
-    //             return newState;
-    //         });
-    //     }
+        if (textPromise.status === 'fulfilled') {
+            setUploadStageSupabase((prevState) => {
+                const newState = [...prevState];
+                newState[1].progress = 100;
+                return newState;
+            });
+        }
 
-    //     if (tablePromise.status === 'fulfilled') {
-    //         setUploadStageSupabase((prevState) => {
-    //             const newState = [...prevState];
-    //             newState[2].progress = 100;
-    //             return newState;
-    //         });
-    //     }
+        if (tablePromise.status === 'fulfilled') {
+            setUploadStageSupabase((prevState) => {
+                const newState = [...prevState];
+                newState[2].progress = 100;
+                return newState;
+            });
+        }
 
-    //     if (kvPromise.status === 'fulfilled') {
-    //         setUploadStageSupabase((prevState) => {
-    //             const newState = [...prevState];
-    //             newState[3].progress = 100;
-    //             return newState;
-    //         });
-    //     }
-    // });
+        if (kvPromise.status === 'fulfilled') {
+            setUploadStageSupabase((prevState) => {
+                const newState = [...prevState];
+                newState[3].progress = 100;
+                return newState;
+            });
+        }
+    });
 
     // update medical record content_embedding_progress to 100
     const { error: progressError } = await supabaseClient
