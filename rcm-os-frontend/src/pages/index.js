@@ -84,9 +84,9 @@ export default function Home() {
 
 
     return (
-        <div className="flex min-h-screen bg-white dark:bg-gray-900">
+        <div className="flex h-full bg-white dark:bg-gray-900">
             <Sidebar setAppStage={setAppStage}/>
-            <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center">
+            <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center overflow-auto">
                 {appStage === 'intro' && (
                     <CSSTransition
                         in={appStage === 'intro'}

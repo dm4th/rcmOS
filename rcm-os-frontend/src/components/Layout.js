@@ -12,7 +12,7 @@ export function Layout({ children }) {
         <div>
             <div className="flex flex-col min-h-screen">
                 <Header />
-                    <main className="flex-grow">{children}</main>
+                    <main className="flex-grow h-screen">{children}</main>
                 <Footer />
             </div>
             {showLoginModal && (
