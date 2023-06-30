@@ -6,13 +6,21 @@ export function ChatHistory ({
     latestResponse, 
     latestMessageId, 
     selectedMessage, 
-    changeMessage }) {
+    changeMessage,
+    citations,
+    selectedCitation,
+    changeCitation
+}) {
 
-    // const [showCitations, setShowCitations] = useState(false);
-    // const [showCitationSummary, setShowCitationSummary] = useState(false);
+    const [showCitations, setShowCitations] = useState(false);
+    const [showCitationSummary, setShowCitationSummary] = useState(false);
 
     function handleSelectMessage(messageId) {
         changeMessage(messageId);
+    };
+
+    function handleSelectCitation(citation) {
+        changeCitation(citation);
     };
 
     const userMessageDisp = (message, key) => {
@@ -29,13 +37,14 @@ export function ChatHistory ({
         );
     }
 
-    const botMessageDisp = (response, key, messageId, latest) => {
+    const botMessageDisp = (response, key, messageId, latest, citations, selectedCitation, changeCitation) => {
         if (response.length > 0) {
             return (
-                <div className="flex items-start mb-2 text-sm text-left text-gray-900 dark:text-gray-100">
-                    <div key={key}>
+                <div className="flex w-full flex-col items-start">
+                    <div key={key} className="w-full p-1 text-sm text-left text-gray-900 dark:text-gray-100">
                         {messageId === selectedMessage ? response : latest && !messageId ? response : "..."}
                     </div>
+                    {messageId === selectedMessage ? citationDisp(citations, selectedCitation, changeCitation) : latest && !messageId ? citationDisp(citations, selectedCitation, changeCitation) : <></>}
                 </div>
             )
         } else {
@@ -55,22 +64,114 @@ export function ChatHistory ({
         return (
             <div onClick={() => handleSelectMessage(latestMessageId)} className={`relative mb-1 p-2 cursor-pointer border-2 bg-white hover:bg-gray-200 dark:bg-gray-900 hover:dark:bg-gray-700 rounded-md ${latestMessageId === selectedMessage ? 'border-gray-800 dark:border-gray-300' : 'border-gray-700 dark:border-gray-400'} `}>
                 {userMessageDisp(latestUserMessage, 'u')}
-                {botMessageDisp(latestResponse, 'm', latestMessageId, true)}
+                {botMessageDisp(latestResponse, 'm', latestMessageId, true, citations, selectedCitation, changeCitation)}
             </div>
         );
     }
+
+    const similarityDisp = (similarity) => {
+        if (similarity > 0.82) {
+            return {
+                similarityColor: 'text-green-700 dark:text-green-400',
+                similarityText: `${Math.round(similarity * 100)}`,
+            };
+        }
+        else if (selectedCitation.similarity > 0.79) {
+            return {
+                similarityColor: 'text-yellow-700 dark:text-yellow-400',
+                similarityText: `${Math.round(similarity * 100)}`,
+            };
+        }
+        else if (selectedCitation.similarity > 0.75) {
+            return {
+                similarityColor: 'text-orange-700 dark:text-orange-400',
+                similarityText: `${Math.round(similarity * 100)}`,
+            };
+        }
+        else {
+            return {
+                similarityColor: 'text-red-700 dark:text-red-400',
+                similarityText: `${Math.round(similarity * 100)}`,
+            };
+        }
+    }
+
+    const citationDisp = (citations, selectedCitation, changeCitation) => {
+        if (citations.length === 0) return null;
+        if (!showCitations) {
+            // Render citations description, including the number of citations, a list of pages, the top similarity strength, and a button to show citations
+            const pages = citations.map(citation => citation.page);
+            const uniquePages = [...new Set(pages)];
+            const { similarityColor, similarityText } = similarityDisp(citations[0].similarity);
+            return (
+                <div className="w-full flex justify-between items-center text-xs text-left italic text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 p-2 rounded">
+                    <div className="mr-1">{citations.length} Citations</div>
+                    <span className="mr-1">
+                        Pages: {uniquePages.map((page, index) => (
+                                <span key={`p-${index}`} className="mr-1">{page}, </span>
+                        ))}
+                    </span>
+                    <div className={`flex items-center ${similarityColor}`}>{similarityText}</div>
+                    <button onClick={() => setShowCitations(true)} className="flex items-center justify-center h-5 w-5 relative text-sm text-gray-900 dark:text-gray-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                </div>
+            );
+        } else {
+            // Render citations list, including a button to hide citations
+            // For each citation, render the citation title, the page, the citation strength, and the citation summary if it is the selectedCitation
+            // Each citation is a button that can be clicked to select the citation
+            return (
+                <div className="w-full flex-col justify-between items-center text-xs text-left italic text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 p-2 rounded">
+                    {citations.map((citation, index) => {
+                        const { similarityColor, similarityText } = similarityDisp(citation.similarity);
+                        return (
+                            <div key={`cit-${index}`} className={`flex flex-col items-center justify-between p-2 cursor-pointer rounded-md hover:bg-gray-400 hover:dark:bg-gray-500`} onClick={() => handleSelectCitation(citation)}>
+                                <div className="flex w-full justify-between p-1">
+                                    <div className="font-bold w-3/4">{citation.title}</div>
+                                    <div className="text-xs w-1/12">p. {citation.page}</div>
+                                    <div className={`text-xs w-1/12 ${similarityColor}`}>{similarityText}</div>
+                                    <button onClick={() => setShowCitationSummary(!showCitationSummary)} className="w-4 h-4">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showCitationSummary ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div className="flex w-full flex-col items-end">
+                                    {citation.citationId === selectedCitation.citationId && showCitationSummary && <div className="text-xs">{citation.summary}</div>}
+                                    {/* {citation.citationId === selectedCitation.citationId && 
+                                        
+                                    } */}
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <button onClick={() => setShowCitations(false)} className="flex items-center justify-center h-6 w-6 relative text-sm text-gray-900 dark:text-gray-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                        </svg>
+                    </button>
+                </div>
+            );
+        }
+    };
+
+
+
 
     // if there are no historical messages and the latestmessages are both empty, return null
     if (messages.length === 0 && latestUserMessage === '' && latestResponse === '') return null;
 
     return (
-        <div className='w-full p-4 border-2 rounded border-gray-800 dark:border-gray-300 bg-gray-100 dark:bg-gray-800'>
+        <div className='w-full overflow-auto p-4 mt-4 border-2 rounded border-gray-800 dark:border-gray-300 bg-gray-100 dark:bg-gray-800'>
             <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-100">Chat History</h3>
             {latestMessageDisp()}
             {messages.slice().reverse().map((message, index) => (
                 <div key={`c-${index}`} onClick={() => handleSelectMessage(message.messageId)} className={`relative mb-1 p-2 cursor-pointer border-2 bg-white hover:bg-gray-200 dark:bg-gray-900 hover:dark:bg-gray-700 rounded-md ${message.messageId === selectedMessage ? 'border-gray-800 dark:border-gray-300' : 'border-gray-700 dark:border-gray-400'} `}>
                     {userMessageDisp(message.prompt, `u-${index}`)}
-                    {botMessageDisp(message.response, `m-${index}`, message.messageId, false)}
+                    {botMessageDisp(message.response, `m-${index}`, message.messageId, false, citations, selectedCitation, changeCitation)}
                 </div>
             ))}
         </div>

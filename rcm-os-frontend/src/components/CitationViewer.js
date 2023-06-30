@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Viewer, Worker, SpecialZoomLevel, ViewMode } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
 // import { searchPlugin } from '@react-pdf-viewer/search';
@@ -11,13 +11,9 @@ import '@react-pdf-viewer/highlight/lib/styles/index.css';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider.js';
 
-export function CitationViewer ({ selectedMessage }) {
+export function CitationViewer ({ selectedCitation, citationLoading }) {
 
-    const { doc, file, supabaseClient } = useSupaUser();
-
-    const [loading, setLoading] = useState(false);
-    const [citations, setCitations] = useState([]);
-    const [citationIndex, setCitationIndex] = useState(0);
+    const { file } = useSupaUser();
 
     // create instance of default layout plugin
     const defaultLayoutPluginInstance = defaultLayoutPlugin();
@@ -41,24 +37,23 @@ export function CitationViewer ({ selectedMessage }) {
 
     const renderHighlights = (props) => {
         const { pageIndex, rotation, getCssProperties } = props;
-        const currentCitation = citations[citationIndex];
-        if (!currentCitation || currentCitation.page-1 !== pageIndex) return <></>;
+        if (!selectedCitation || selectedCitation.page-1 !== pageIndex) return <></>;
         const citationBorders = {
-            pageIndex: currentCitation.page-1,
-            left: Math.max(currentCitation.left-0.01, 0)*100.0,
-            top: Math.max(currentCitation.top-0.01, 0)*100.0,
-            height: Math.min(currentCitation.bottom+0.02 - currentCitation.top, 1)*100.0,
-            width: Math.min(currentCitation.right+0.02 - currentCitation.left, 1)*100.0,
+            pageIndex: selectedCitation.page-1,
+            left: Math.max(selectedCitation.left-0.01, 0)*100.0,
+            top: Math.max(selectedCitation.top-0.01, 0)*100.0,
+            height: Math.min(selectedCitation.bottom+0.02 - selectedCitation.top, 1)*100.0,
+            width: Math.min(selectedCitation.right+0.02 - selectedCitation.left, 1)*100.0,
         };
         return (
             <div>
                 <div
-                    key={`highlight-${currentCitation.id}`}
+                    key={`highlight-${selectedCitation.id}`}
                     className="highlight__area rounded-2xl"
                     style={Object.assign(
                         {},
                         {
-                            background: highlightColor(currentCitation.type),
+                            background: highlightColor(selectedCitation.type),
                             opacity: 0.4,
                         },
                         getCssProperties(citationBorders, rotation)
@@ -73,99 +68,17 @@ export function CitationViewer ({ selectedMessage }) {
         trigger: Trigger.None 
     });
 
-    useEffect(() => {
-        const getCitations = async () => {
-            const { data, error } = await supabaseClient
-                .from('document_chat_citations')
-                .select('*')
-                .eq('chat_history_id', selectedMessage)
-                .order('index', { ascending: true });
-            if (error) {
-                console.error(error);
-            } else {
-                if (data.length === 0) {
-                    setCitations([]);
-                }
-                else {
-                    const citationArray = data.map((c) => {
-                        return {
-                            index: c.index,
-                            type: c.type,
-                            page: c.page,
-                            title: c.title,
-                            summary: c.summary,
-                            left: c.left,
-                            top: c.top,
-                            right: c.right,
-                            bottom: c.bottom,
-                            similarity: c.similarity,
-                        }
-                    });
-                    setCitations(citationArray);
-                    setCitationIndex(0);
-                }
-            }
-            setLoading(false);
-        }
-        if (selectedMessage) {
-            setLoading(true);
-            getCitations();
-        }
-        else {
-            setCitations([]);
-            setCitationIndex(0);
-        }
-    }, [selectedMessage]);
-
-    const citationInformation = () => {
-        const currentCitation = citations[citationIndex];
-        if (currentCitation) {
-            let similarityColor;
-            let similarityText;
-            const roundedSimilarity = Math.round(currentCitation.similarity * 100);
-            if (currentCitation.similarity > 0.82) {
-                similarityColor = 'text-green-700 dark:text-green-400';
-                similarityText = 'Strong Match';
-            }
-            else if (currentCitation.similarity > 0.79) {
-                similarityColor = 'text-yellow-700 dark:text-yellow-400';
-                similarityText = 'Good Match';
-            }
-            else if (currentCitation.similarity > 0.75) {
-                similarityColor = 'text-orange-700 dark:text-orange-400';
-                similarityText = 'Fair Match';
-            }
-            else {
-                similarityColor = 'text-red-700 dark:text-red-400';
-                similarityText = 'Weak Match';
-            }
-            return (
-                <div className='flex justify-between w-full'>
-                    <p className='text-sm font-bold'>{currentCitation.title}</p>
-                    <p className='text-sm font-bold'>page {currentCitation.page}</p>
-                    <p className={`text-sm font-bold ${similarityColor}`}>{similarityText} - {roundedSimilarity}</p>
-                </div>
-            );
-        }
-        else {
-            return (
-                <></>
-            );
-        }
-    };
-
     const PDFViewer = () => {
-        if (file && citations.length > 0) {
-            const currentCitation = citations[citationIndex];
+        if (file && selectedCitation) {
             return (
-                <div className='h-full w-full overflow-auto rounded-xl'>
+                <div className='h-full w-full overflow-auto rounded-md'>
                     <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.7.107/build/pdf.worker.js">
                         <Viewer
                             theme={{ theme: 'auto' }}
                             fileUrl={file}
                             defaultScale={SpecialZoomLevel.PageFit}
                             viewMode={ViewMode.SinglePage}
-                            initialPage={currentCitation ? currentCitation.page-1 : 0}
+                            initialPage={selectedCitation ? selectedCitation.page-1 : 0}
                             plugins={[highlightPluginInstance, defaultLayoutPluginInstance]}
                             
                         />
@@ -180,7 +93,7 @@ export function CitationViewer ({ selectedMessage }) {
         }
     }
 
-    if (loading) return (
+    if (citationLoading) return (
         <div className="h-full m-8 p-4 border-2 rounded border-gray-800 dark:border-gray-300 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
             <div className='relative items-center justify-center h-1/2 w-1/2'>
                 <svg className="animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -193,7 +106,6 @@ export function CitationViewer ({ selectedMessage }) {
 
     return (
         <div className="flex flex-col h-full m-8 p-4 border-2 rounded border-gray-800 dark:border-gray-300 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-            {citationInformation()}
             {PDFViewer()}
         </div>
     );

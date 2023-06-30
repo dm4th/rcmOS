@@ -22,6 +22,55 @@ export function ChatInterface({ }) {
     const [latestResponse, setLatestResponse] = useState('');
     const [latestMessageId, setLatestMessageId] = useState(null);
     const [selectedMessage, setSelectedMessage] = useState(null);
+    const [citations, setCitations] = useState([]);
+    const [selectedCitation, setSelectedCitation] = useState(null);
+    const [citationLoading, setCitationLoading] = useState(false);
+
+    const resetChatState = () => {
+        setMessages([]);
+        setLatestUserMessage('');
+        setLatestResponse('');
+        setLatestMessageId(null);
+        setSelectedMessage(null);
+        setCitations([]);
+        setSelectedCitation(null);
+    }
+
+    const getCitations = async (messageId) => {
+        setCitationLoading(true);
+        const { data, error } = await supabaseClient
+            .from('document_chat_citations')
+            .select('*')
+            .eq('chat_history_id', messageId)
+            .order('index', { ascending: true });
+        if (error) {
+            console.error(error);
+        } else {
+            if (data.length === 0) {
+                setCitations([]);
+                setSelectedCitation(null);
+            }
+            else {
+                const citationArray = data.map((c) => {
+                    return {
+                        index: c.index,
+                        type: c.type,
+                        page: c.page,
+                        title: c.title,
+                        summary: c.summary,
+                        left: c.left,
+                        top: c.top,
+                        right: c.right,
+                        bottom: c.bottom,
+                        similarity: c.similarity,
+                    }
+                });
+                setCitations(citationArray);
+                setSelectedCitation(citationArray[0]);
+            }
+        }
+        setCitationLoading(false);
+    }
 
     const onUserInput = async (userPrompt) => {
         setMessages((prevMessages) => [
@@ -57,6 +106,7 @@ export function ChatInterface({ }) {
                 if (data.history_id) {
                     setLatestMessageId(data.history_id);
                     setSelectedMessage(data.history_id);
+                    getCitations(data.history_id);
                 }
                 if (data.token) {
                     setLatestResponse((t) => t + data.token);
@@ -67,11 +117,7 @@ export function ChatInterface({ }) {
 
     useEffect(() => {
         if (!chat) {
-            setMessages([]);
-            setLatestUserMessage('');
-            setLatestResponse('');
-            setLatestMessageId(null);
-            setSelectedMessage(null);
+            resetChatState();
             return;
         }
 
@@ -86,11 +132,7 @@ export function ChatInterface({ }) {
                 alert(error.message);
             } else {
                 if (messages.length === 0) {
-                    setMessages([]);
-                    setLatestUserMessage('');
-                    setLatestResponse('');
-                    setLatestMessageId(null);
-                    setSelectedMessage(null);
+                    resetChatState();
                 }
                 else {
                     const messageArray = messages.map((m) => {
@@ -105,22 +147,40 @@ export function ChatInterface({ }) {
                     setLatestResponse(messages[0].response);
                     setLatestMessageId(messages[0].id);
                     setSelectedMessage(messages[0].id);
+                    getCitations(messages[0].id);
                 }
             }
         }
         fetchMessages();
     }, [chat]);
 
+    useEffect(() => {
+        if (!selectedMessage) {
+            setCitations([]);
+            setSelectedCitation(null);
+            return;
+        }
+        getCitations(selectedMessage);
+    }, [selectedMessage]);
+
     return (
         <div className="flex h-full w-full overflow-hidden">
             <div className="flex flex-col w-2/5 h-full p-4 mv-4 pr-0.5">
                 <ChatBox onUserInput={onUserInput} />
-                <div className="mt-4 overflow-auto">
-                    <ChatHistory messages={messages} latestUserMessage={latestUserMessage} latestResponse={latestResponse} latestMessageId={latestMessageId} selectedMessage={selectedMessage} changeMessage={setSelectedMessage} />
-                </div>
+                <ChatHistory 
+                    messages={messages} 
+                    latestUserMessage={latestUserMessage} 
+                    latestResponse={latestResponse} 
+                    latestMessageId={latestMessageId} 
+                    selectedMessage={selectedMessage} 
+                    changeMessage={setSelectedMessage} 
+                    citations={citations}
+                    selectedCitation={selectedCitation}
+                    changeCitation={setSelectedCitation}
+                />
             </div>
             <div className="flex flex-col justify-center w-3/5 h-full p-4 mv-4 pl-0.5">
-                <CitationViewer selectedMessage={selectedMessage} />
+                <CitationViewer selectedCitation={selectedCitation} citationLoading={citationLoading} />
             </div>
         </div>
     );
