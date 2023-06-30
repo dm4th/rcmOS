@@ -1,6 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
-export function ChatHistory ({ messages, latestUserMessage, latestResponse, latestMessageId, selectedMessage, changeMessage }) {
+export function ChatHistory ({ 
+    messages, 
+    latestUserMessage, 
+    latestResponse, 
+    latestMessageId, 
+    selectedMessage, 
+    changeMessage }) {
+
+    // const [showCitations, setShowCitations] = useState(false);
+    // const [showCitationSummary, setShowCitationSummary] = useState(false);
 
     function handleSelectMessage(messageId) {
         changeMessage(messageId);

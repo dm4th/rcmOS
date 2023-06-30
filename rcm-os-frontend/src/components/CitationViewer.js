@@ -18,64 +18,61 @@ export function CitationViewer ({ selectedMessage }) {
     const [loading, setLoading] = useState(false);
     const [citations, setCitations] = useState([]);
     const [citationIndex, setCitationIndex] = useState(0);
-    const [currentCitation, setCurrentCitation] = useState(null);
 
     // create instance of default layout plugin
     const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
-    // create instance of highlight plugin
-    const renderHighlight = (props) => {
-        const highlightArea = {
-            left: currentCitation.left * 100.0,
-            top: currentCitation.top * 100.0,
-            height: (currentCitation.bottom - currentCitation.top) * 100.0,
-            width: (currentCitation.right - currentCitation.left) * 100.0,
-            pageIndex: currentCitation.page,
-        };
-        let highlightColor;
-        switch (currentCitation.type) {
+    const highlightColor = (type) => {
+        switch (type) {
             case 'text':
                 // yellow
-                highlightColor = 'yellow';
-                break;
+                return 'yellow';
             case 'table':
                 // green
-                highlightColor = 'green';
-                break;
+                return 'green';
             case 'key-value':
                 // blue
-                highlightColor = 'blue';
-                break;
+                return 'blue';
             default:
                 // red
-                highlightColor = 'red';
-                break;
+                return 'red';
         };
-        const hightlightStyle = (Object.assign(
-            {},
-            {
-                background: highlightColor,
-                opacity: 0.3,
-            },
-            props.getCssProperties(highlightArea, props.rotation)
-        ));
+    };
+
+    const renderHighlights = (props) => {
+        const { pageIndex, rotation, getCssProperties } = props;
+        const currentCitation = citations[citationIndex];
+        if (!currentCitation || currentCitation.page-1 !== pageIndex) return <></>;
+        const citationBorders = {
+            pageIndex: currentCitation.page-1,
+            left: Math.max(currentCitation.left-0.01, 0)*100.0,
+            top: Math.max(currentCitation.top-0.01, 0)*100.0,
+            height: Math.min(currentCitation.bottom+0.02 - currentCitation.top, 1)*100.0,
+            width: Math.min(currentCitation.right+0.02 - currentCitation.left, 1)*100.0,
+        };
         return (
-            <div key='highlight' className="highlight-area" style={hightlightStyle} />
+            <div>
+                <div
+                    key={`highlight-${currentCitation.id}`}
+                    className="highlight__area rounded-2xl"
+                    style={Object.assign(
+                        {},
+                        {
+                            background: highlightColor(currentCitation.type),
+                            opacity: 0.4,
+                        },
+                        getCssProperties(citationBorders, rotation)
+                    )}
+                />
+            </div>
         );
     };
 
     const highlightPluginInstance = highlightPlugin({ 
-        renderHighlight,
+        renderHighlights,
         trigger: Trigger.None 
     });
 
-    // interface HighlightArea {
-    //     left: number;
-    //     top: number;
-    //     height: number;
-    //     width: number;
-    //     pageIndex: number;
-    // };
     useEffect(() => {
         const getCitations = async () => {
             const { data, error } = await supabaseClient
@@ -106,7 +103,6 @@ export function CitationViewer ({ selectedMessage }) {
                     });
                     setCitations(citationArray);
                     setCitationIndex(0);
-                    setCurrentCitation(citationArray[0]);
                 }
             }
             setLoading(false);
@@ -118,11 +114,11 @@ export function CitationViewer ({ selectedMessage }) {
         else {
             setCitations([]);
             setCitationIndex(0);
-            setCurrentCitation(null);
         }
     }, [selectedMessage]);
 
     const citationInformation = () => {
+        const currentCitation = citations[citationIndex];
         if (currentCitation) {
             let similarityColor;
             let similarityText;
@@ -159,8 +155,8 @@ export function CitationViewer ({ selectedMessage }) {
     };
 
     const PDFViewer = () => {
-        if (file && currentCitation) {
-            console.log(currentCitation);
+        if (file && citations.length > 0) {
+            const currentCitation = citations[citationIndex];
             return (
                 <div className='h-full w-full overflow-auto rounded-xl'>
                     <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.7.107/build/pdf.worker.js">
