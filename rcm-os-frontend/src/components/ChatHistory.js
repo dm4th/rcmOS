@@ -16,7 +16,11 @@ export function ChatHistory ({
     const [showCitationSummary, setShowCitationSummary] = useState(false);
 
     function handleSelectMessage(messageId) {
-        changeMessage(messageId);
+        if (messageId !== selectedMessage) {
+            setShowCitationSummary(false);
+            setShowCitations(false);
+            changeMessage(messageId);
+        }
     };
 
     function handleSelectCitation(citation) {
@@ -77,7 +81,7 @@ export function ChatHistory ({
     const latestMessageDisp = () => {
         if (latestUserMessage === '') return null;
         return (
-            <div onClick={() => handleSelectMessage(latestMessageId)} className={`relative mb-1 p-2 cursor-pointer border-2 bg-white hover:bg-gray-200 dark:bg-gray-900 hover:dark:bg-gray-700 rounded-md ${latestMessageId === selectedMessage ? 'border-gray-800 dark:border-gray-300' : 'border-gray-700 dark:border-gray-400'} `}>
+            <div onClick={() => handleSelectMessage(latestMessageId)} className={`relative mb-1 p-2 cursor-pointer border-2 bg-white dark:bg-gray-900 rounded-md ${latestMessageId === selectedMessage ? 'border-gray-800 dark:border-gray-300' : 'border-gray-700 dark:border-gray-400 hover:bg-gray-200 hover:dark:bg-gray-700'} `}>
                 {userMessageDisp(latestUserMessage, 'u')}
                 {botMessageDisp(latestResponse, 'm', latestMessageId, true, citations, selectedCitation, changeCitation)}
             </div>
@@ -91,13 +95,13 @@ export function ChatHistory ({
                 similarityText: `${Math.round(similarity * 100)}`,
             };
         }
-        else if (selectedCitation.similarity > 0.79) {
+        else if (similarity > 0.79) {
             return {
                 similarityColor: 'text-yellow-700 dark:text-yellow-400',
                 similarityText: `${Math.round(similarity * 100)}`,
             };
         }
-        else if (selectedCitation.similarity > 0.75) {
+        else if (similarity > 0.75) {
             return {
                 similarityColor: 'text-orange-700 dark:text-orange-400',
                 similarityText: `${Math.round(similarity * 100)}`,
@@ -149,6 +153,7 @@ export function ChatHistory ({
                     </div>
                     {citations.map((citation, index) => {
                         const { similarityColor, similarityText } = similarityDisp(citation.similarity);
+                        console.log(citation, similarityColor, similarityText);
                         return (
                             <div key={`cit-${index}`} className={`flex flex-col items-center justify-between p-2 cursor-pointer rounded-md hover:bg-gray-400 hover:dark:bg-gray-500`} onClick={() => handleSelectCitation(citation)}>
                                 <div className="flex w-full justify-between p-1">
