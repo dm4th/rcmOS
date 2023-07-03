@@ -115,6 +115,10 @@ export function ChatInterface({ }) {
         });
     }
 
+    const handleCitationClick = (citation) => {
+        setSelectedCitation(citation);
+    }
+
     useEffect(() => {
         if (!chat) {
             resetChatState();
@@ -176,7 +180,7 @@ export function ChatInterface({ }) {
                     changeMessage={setSelectedMessage} 
                     citations={citations}
                     selectedCitation={selectedCitation}
-                    changeCitation={setSelectedCitation}
+                    changeCitation={handleCitationClick}
                 />
             </div>
             <div className="flex flex-col justify-center w-3/5 h-full p-4 mv-4 pl-0.5">

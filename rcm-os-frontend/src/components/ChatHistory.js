@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export function ChatHistory ({ 
     messages, 
@@ -21,6 +21,21 @@ export function ChatHistory ({
 
     function handleSelectCitation(citation) {
         changeCitation(citation);
+    };
+
+    function handleShowCitations() {
+        setShowCitationSummary(false);
+        setShowCitations(!showCitations);
+    };
+
+    function handleShowCitationSummary(citation) {
+        if (citation === selectedCitation) {
+            setShowCitationSummary(!showCitationSummary);
+        }
+        else {
+            handleSelectCitation(citation);
+            setShowCitationSummary(true);
+        }
     };
 
     const userMessageDisp = (message, key) => {
@@ -112,7 +127,7 @@ export function ChatHistory ({
                         ))}
                     </span>
                     <div className={`flex items-center ${similarityColor}`}>{similarityText}</div>
-                    <button onClick={() => setShowCitations(true)} className="flex items-center justify-center h-5 w-5 relative text-sm text-gray-900 dark:text-gray-100">
+                    <button onClick={() => handleShowCitations()} className="flex items-center justify-center h-5 w-5 relative text-sm text-gray-900 dark:text-gray-100">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -125,6 +140,13 @@ export function ChatHistory ({
             // Each citation is a button that can be clicked to select the citation
             return (
                 <div className="w-full flex-col justify-between items-center text-xs text-left italic text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 p-2 rounded">
+                    <div className="flex justify-end items-center">
+                        <button onClick={() =>  handleShowCitations()} className="h-5 w-5 text-sm text-gray-900 dark:text-gray-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                            </svg>
+                        </button>
+                    </div>
                     {citations.map((citation, index) => {
                         const { similarityColor, similarityText } = similarityDisp(citation.similarity);
                         return (
@@ -133,26 +155,18 @@ export function ChatHistory ({
                                     <div className="font-bold w-3/4">{citation.title}</div>
                                     <div className="text-xs w-1/12">p. {citation.page}</div>
                                     <div className={`text-xs w-1/12 ${similarityColor}`}>{similarityText}</div>
-                                    <button onClick={() => setShowCitationSummary(!showCitationSummary)} className="w-4 h-4">
+                                    <button onClick={() => handleShowCitationSummary(citation)} className="w-4 h-4">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showCitationSummary ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={citation === selectedCitation && showCitationSummary ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
                                         </svg>
                                     </button>
                                 </div>
                                 <div className="flex w-full flex-col items-end">
-                                    {citation.citationId === selectedCitation.citationId && showCitationSummary && <div className="text-xs">{citation.summary}</div>}
-                                    {/* {citation.citationId === selectedCitation.citationId && 
-                                        
-                                    } */}
+                                    {citation === selectedCitation && showCitationSummary && <div className="text-xs">{citation.summary}</div>}
                                 </div>
                             </div>
                         );
                     })}
-                    <button onClick={() => setShowCitations(false)} className="flex items-center justify-center h-6 w-6 relative text-sm text-gray-900 dark:text-gray-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                        </svg>
-                    </button>
                 </div>
             );
         }
@@ -169,7 +183,7 @@ export function ChatHistory ({
             <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-gray-100">Chat History</h3>
             {latestMessageDisp()}
             {messages.slice().reverse().map((message, index) => (
-                <div key={`c-${index}`} onClick={() => handleSelectMessage(message.messageId)} className={`relative mb-1 p-2 cursor-pointer border-2 bg-white hover:bg-gray-200 dark:bg-gray-900 hover:dark:bg-gray-700 rounded-md ${message.messageId === selectedMessage ? 'border-gray-800 dark:border-gray-300' : 'border-gray-700 dark:border-gray-400'} `}>
+                <div key={`c-${index}`} onClick={() => handleSelectMessage(message.messageId)} className={`relative mb-1 p-2 cursor-pointer border-2 bg-white dark:bg-gray-900 rounded-md ${message.messageId === selectedMessage ? 'border-gray-800 dark:border-gray-300' : 'border-gray-700 dark:border-gray-400 hover:bg-gray-200 hover:dark:bg-gray-700'} `}>
                     {userMessageDisp(message.prompt, `u-${index}`)}
                     {botMessageDisp(message.response, `m-${index}`, message.messageId, false, citations, selectedCitation, changeCitation)}
                 </div>

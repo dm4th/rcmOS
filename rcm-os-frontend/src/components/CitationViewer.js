@@ -1,7 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Viewer, Worker, SpecialZoomLevel, ViewMode } from '@react-pdf-viewer/core';
 import { defaultLayoutPlugin } from '@react-pdf-viewer/default-layout';
-// import { searchPlugin } from '@react-pdf-viewer/search';
 import { highlightPlugin, Trigger } from '@react-pdf-viewer/highlight';
 
 // Import the styles
@@ -18,6 +17,7 @@ export function CitationViewer ({ selectedCitation, citationLoading }) {
     // create instance of default layout plugin
     const defaultLayoutPluginInstance = defaultLayoutPlugin();
 
+    // create instance of highlight plugin
     const highlightColor = (type) => {
         switch (type) {
             case 'text':
@@ -67,6 +67,7 @@ export function CitationViewer ({ selectedCitation, citationLoading }) {
         renderHighlights,
         trigger: Trigger.None 
     });
+    const { jumpToHighlightArea } = highlightPluginInstance;
 
     const PDFViewer = () => {
         if (file && selectedCitation) {
@@ -79,8 +80,7 @@ export function CitationViewer ({ selectedCitation, citationLoading }) {
                             defaultScale={SpecialZoomLevel.PageFit}
                             viewMode={ViewMode.SinglePage}
                             initialPage={selectedCitation ? selectedCitation.page-1 : 0}
-                            plugins={[highlightPluginInstance, defaultLayoutPluginInstance]}
-                            
+                            plugins={[ highlightPluginInstance, defaultLayoutPluginInstance ]}
                         />
                     </Worker>
                 </div>
@@ -92,6 +92,19 @@ export function CitationViewer ({ selectedCitation, citationLoading }) {
             );
         }
     }
+
+    useEffect(() => {
+        if (selectedCitation) {
+            const citationHighlightArea = {
+                pageIndex: selectedCitation.page-1,
+                left: Math.max(selectedCitation.left-0.01, 0)*100.0,
+                top: Math.max(selectedCitation.top-0.01, 0)*100.0,
+                height: Math.min(selectedCitation.bottom+0.02 - selectedCitation.top, 1)*100.0,
+                width: Math.min(selectedCitation.right+0.02 - selectedCitation.left, 1)*100.0,
+            }
+            highlightPluginInstance.jumpToHighlightArea(citationHighlightArea);
+        }
+    }, [selectedCitation]);
 
     if (citationLoading) return (
         <div className="h-full m-8 p-4 border-2 rounded border-gray-800 dark:border-gray-300 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
