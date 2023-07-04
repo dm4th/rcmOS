@@ -84,6 +84,9 @@ export function ChatInterface({ }) {
         setLatestUserMessage(userPrompt);
         setLatestResponse('');
         setLatestMessageId(null);
+        setSelectedMessage(null);
+        setCitations([]);
+        setSelectedCitation(null);
 
         // Send user input to backend
         const chatUrl = process.env.NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL + 'document-chat';
