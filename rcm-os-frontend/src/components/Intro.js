@@ -4,9 +4,11 @@ export function Intro({ handleFileChange, handleFileDrop, handleTestingButtonCli
     const { user, isLoading, handleLogin } = useSupaUser();
 
     const content = isLoading ? (
-        <p className="text-2xl text-gray-900 dark:text-white">Loading...</p>
+        <div>
+            <p className="text-2xl text-gray-900 dark:text-white">Loading...</p>
+        </div>
     ) : user ? (
-        <>
+        <div>
             <p className="mt-3 text-2xl text-gray-900 dark:text-white">
                 Upload a medical record to get started.
             </p>
@@ -26,25 +28,25 @@ export function Intro({ handleFileChange, handleFileDrop, handleTestingButtonCli
             {/* <button onClick={handleTestingButtonClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
                 Run LLM Processing with Pre-Processed Textract Record
             </button> */}
-        </>
+        </div>
     ) : (
-        <>
+        <div>
             <p className="mt-3 text-2xl text-gray-900 dark:text-white">
                 Please Sign In to Upload
             </p>
             <button onClick={handleLogin} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
                 Sign In
             </button>
-        </>
+        </div>
     );
 
     return (
-        <>
+        <div>
             <h1 className="text-6xl font-bold text-gray-900 dark:text-white">
                 Welcome to rcmOS
             </h1>
 
             {content}
-        </>
+        </div>
     );
 }

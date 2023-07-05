@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
 
-import { CSSTransition } from 'react-transition-group';
+import { CSSTransition, Transition } from 'react-transition-group';
 
 import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
@@ -25,13 +25,12 @@ const supabaseProcessingStages = [
     { stage: 'Generating Key-Value Summaries & Embeddings', progress: 0, max: 100, active: false },
 ];
 
-
-
 export default function Home() {
 
     const { user, supabaseClient, changeDoc, chat, changeChat } = useSupaUser();
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
+    const [transitioningState, setTransitioningState] = useState(false);
 
     const [file, setFile] = useState(null);
     const [uploadStageAWS, setUploadStageAWS] = useState(awsProcessingStages);
@@ -41,7 +40,7 @@ export default function Home() {
         const processFileAsync = async () => {
             // Helper function to go through each stage of the processing cycle
             await processFile(file, user, supabaseClient, changeDoc, changeChat, setUploadStageAWS, setUploadStageSupabase);
-            setAppStage('chat');
+            changeAppState('chat');
         };
 
         if (appStage === 'processing') {
@@ -54,69 +53,71 @@ export default function Home() {
 
     useEffect(() => {
         if (!user) {
-            setAppStage('intro');
+            changeAppState('intro');
         }
     }, [user]);
 
     useEffect(() => {
         if (chat) {
-            setAppStage('chat');
+            changeAppState('chat');
         }
     }, [chat]);
+
+    const changeAppState = (newState) => {
+        setTransitioningState(true);
+        setTimeout(() => {
+            setAppStage(newState);
+            setTransitioningState(false);
+        }, 300);
+    }
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
         setFile(file);
-        setAppStage('processing');
+        changeAppState('processing');
     };
 
     const handleFileDrop = (e) => {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
         setFile(file);
-        setAppStage('processing');
+        changeAppState('processing');
     };
 
     const handleTestingButtonClick = () => {
         setFile(null);
-        setAppStage('processing');
+        changeAppState('processing');
     };
 
 
     return (
         <div className="flex h-full bg-white dark:bg-gray-900">
-            <Sidebar setAppStage={setAppStage}/>
+            <Sidebar setAppStage={changeAppState}/>
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center overflow-auto">
-                {appStage === 'intro' && (
                     <CSSTransition
-                        in={appStage === 'intro'}
+                        in={appStage === 'intro' && !transitioningState}
                         timeout={300}
-                        classNames="slide-up"
-                        unmountOnExit
+                        classNames="fade"
+                        unmountOnExit={true}
                     >
                         <Intro handleFileChange={handleFileChange} handleFileDrop={handleFileDrop} handleTestingButtonClick={handleTestingButtonClick} />
                     </CSSTransition>
-                )}
-                {appStage === 'processing' && (
                     <CSSTransition
-                        in={appStage === 'processing'}
+                        in={appStage === 'processing' && !transitioningState}
                         timeout={300}
-                        classNames="slide-up"
-                        unmountOnExit
+                        classNames="fade"
+                        unmountOnExit={true}
                     >
                         <Processing uploadStageAWS={uploadStageAWS} uploadStageSupabase={uploadStageSupabase} />
                     </CSSTransition>
-                )}
-                {appStage === 'chat' && (
                     <CSSTransition
-                        in={appStage === 'chat'}
+                        in={appStage === 'chat' && !transitioningState}
                         timeout={300}
-                        classNames="slide-up"
-                        unmountOnExit
+                        classNames="fade"
+                        unmountOnExit={true}
                     >
                         <ChatInterface />
                     </CSSTransition>
-                )}
             </main>
         </div>
     )
