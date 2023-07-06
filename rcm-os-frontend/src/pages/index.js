@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
 
-import { CSSTransition, Transition } from 'react-transition-group';
+import { CSSTransition } from 'react-transition-group';
 
 import { Intro } from '@/components/Intro';
 import { Processing } from '@/components/Processing';
 import { Sidebar } from '@/components/Sidebar';
 import { ChatInterface } from '@/components/ChatInterface';
+import { InputTemplateModal } from '@/components/InputTemplateModal';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
@@ -33,13 +34,17 @@ export default function Home() {
     const [transitioningState, setTransitioningState] = useState(false);
 
     const [file, setFile] = useState(null);
+
+    const [inputModalOpen, setInputModalOpen] = useState(false);
+    const [inputTemplateId, setInputTemplateId] = useState(null);
+
     const [uploadStageAWS, setUploadStageAWS] = useState(awsProcessingStages);
     const [uploadStageSupabase, setUploadStageSupabase] = useState(supabaseProcessingStages);
 
     useEffect(() => {
         const processFileAsync = async () => {
             // Helper function to go through each stage of the processing cycle
-            await processFile(file, user, supabaseClient, changeDoc, changeChat, setUploadStageAWS, setUploadStageSupabase);
+            await processFile(file, inputTemplateId, toggleInputModal, user, supabaseClient, changeDoc, changeChat, setUploadStageAWS, setUploadStageSupabase);
             changeAppState('chat');
         };
 
@@ -89,6 +94,9 @@ export default function Home() {
         changeAppState('processing');
     };
 
+    const toggleInputModal = () => {
+        setInputModalOpen(!inputModalOpen);
+    };
 
     return (
         <div className="flex h-full bg-white dark:bg-gray-900">
@@ -119,6 +127,7 @@ export default function Home() {
                         <ChatInterface />
                     </CSSTransition>
             </main>
+            {inputModalOpen && <InputTemplateModal onClose={toggleInputModal} onTemplateSelect={setInputTemplateId} />}
         </div>
     )
 }

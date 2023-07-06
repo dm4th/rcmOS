@@ -4,7 +4,7 @@ import axios from 'axios';
 export const uploadFileAWS = async (file, stage, setUploadStage) => {
     if (!file) {
         // If no file is passed to the function, return hard-coded textract job id
-        const jobIds = "4f2e4f7f12a512e655c04a9ee54b853f82f1c1cb7766e9e47cc934618d6883ae";
+        const jobIds = "8eafdd46c1cfd22aa29828318d1756b55a195c22d78af20de6e6724f4b389418";
         setUploadStage((prevState) => {
             const newState = [...prevState];
             newState[stage].progress = 100;
@@ -58,7 +58,29 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
     return jobId;
 };
 
-export const pollJobAWS = async (jobId, stage, setUploadStage) => {
+export const textractOCR = async (jobId, pollStageId, retrieveStageId, setUploadStage) => {
+    // Poll Textract Job Status
+    console.log(jobId);
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[pollStageId].active = true;
+        return newState;
+    });
+    const pages = await pollJobAWS(jobId, pollStageId, setUploadStage);
+    if (!pages) return;
+
+    // Retrieve Full Textract Results
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[retrieveStageId].active = true;
+        return newState;
+    });
+    const results = await getResultsAWS(jobId, retrieveStageId, setUploadStage);
+    if (!results) return;
+    return results;
+};
+
+const pollJobAWS = async (jobId, stage, setUploadStage) => {
     // Poll Textract Job Status
     let jobStatus = 'IN_PROGRESS';
     let statusRes;
@@ -106,7 +128,7 @@ export const pollJobAWS = async (jobId, stage, setUploadStage) => {
     return JSON.parse(statusRes.data.body).Metadata.Pages;
 };
 
-export const getResultsAWS = async (jobId, stage, setUploadStage) => {
+const getResultsAWS = async (jobId, stage, setUploadStage) => {
     // Retrieve Full Textract Results
     let nextToken = null;
     let first = true;

@@ -1,12 +1,18 @@
-export const createFileSupabase = async (jobId, file, user, supabaseClient, stage, setUploadStage) => {
+export const createFileSupabase = async (jobId, file, inputTemplateId, toggleInputModal, user, supabaseClient, stage, setUploadStage) => {
 
     // check if a record with this jobId already exists in the medical_records table
     // if so, set the id using setSupabaseId and return
     // else: 
-        // 1. upload the file to supabase storage 
-        // 2. create a new record and set the id using setSupabaseId
+        // 1. Get an input template id from the input_templates table - prompt the user to create a new one if none exist
+        // 2. upload the file to supabase storage 
+        // 3. create a new record and set the id using setSupabaseId
 
     // check for existing record
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].active=true;
+        return newState;
+    });
     const { data, error } = await supabaseClient
         .from('medical_records')
         .select('id, file_name')
@@ -34,6 +40,10 @@ export const createFileSupabase = async (jobId, file, user, supabaseClient, stag
         });
         return data[0];
     }
+
+    // TOGGLE THE INPUT MODAL HERE!!!
+    // prompt user for input template they'd like to use
+    await promptForInputTemplate(inputTemplateId, toggleInputModal);
 
     // upload file to supabase storage
     const fileUrl = `${user.id}/${file.name}`;
@@ -76,6 +86,14 @@ export const createFileSupabase = async (jobId, file, user, supabaseClient, stag
         return newState;
     });
     return insertData[0];
+};
+
+const promptForInputTemplate = async (templateId, toggleInputModal) => {
+    // toggle the input modal and wait for the templateId to change to something other than null
+    toggleInputModal();
+    while (templateId === null) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
 };
 
 export const handleTextSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
