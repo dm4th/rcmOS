@@ -58,10 +58,33 @@ export function ChatHistory ({
 
     const botMessageDisp = (response, key, messageId, latest, citations, selectedCitation, changeCitation) => {
         if (response.length > 0) {
+            const words = response.split(" ");
+            let skip = false;
+            const parsedResponse = words.map((word, index) => {
+                if (skip) {
+                    skip = false;
+                    return;
+                }
+                if ((word === "page" || word === "Page") && words[index + 1] && words[index + 1].match(/\d+\D?/)) {
+                    const pageNumber = parseInt(words[index + 1].replace(/\D/g,''));
+                    const punctuation = words[index + 1].replace(/\d/g,'');
+                    const citation = citations.find(citation => citation.page === pageNumber);
+                    if (citation) {
+                        skip = true;
+                        return (
+                            <span key={index} className="text-blue-500 cursor-pointer" onClick={() => handleShowCitationSummary(citation)}>
+                                {index !== 0 ? ' ' : ''}{word} {pageNumber}{punctuation}
+                            </span>
+                        );
+                    }
+                }
+                return index !== 0 ? ` ${word}` : word;
+            });
+
             return (
                 <div className="flex w-full flex-col items-start">
                     <div key={key} className="w-full p-1 text-sm text-left text-gray-900 dark:text-gray-100">
-                        {messageId === selectedMessage ? response : latest && !messageId ? response : "..."}
+                        {messageId === selectedMessage ? parsedResponse : latest && !messageId ? parsedResponse : "..."}
                     </div>
                     {messageId === selectedMessage ? citationDisp(citations, selectedCitation, changeCitation) : latest && !messageId ? citationDisp(citations, selectedCitation, changeCitation) : <></>}
                 </div>
@@ -93,24 +116,28 @@ export function ChatHistory ({
             return {
                 similarityColor: 'text-green-700 dark:text-green-400',
                 similarityText: `${Math.round(similarity * 100)}`,
+                similarityTitle: 'This score indicates a high similarity between the user input and the document content.' 
             };
         }
         else if (similarity > 0.79) {
             return {
                 similarityColor: 'text-yellow-700 dark:text-yellow-400',
                 similarityText: `${Math.round(similarity * 100)}`,
+                similarityTitle: 'This score indicates a moderate similarity between the user input and the document content.'
             };
         }
         else if (similarity > 0.75) {
             return {
                 similarityColor: 'text-orange-700 dark:text-orange-400',
                 similarityText: `${Math.round(similarity * 100)}`,
+                similarityTitle: 'This score indicates a low similarity between the user input and the document content.'
             };
         }
         else {
             return {
                 similarityColor: 'text-red-700 dark:text-red-400',
                 similarityText: `${Math.round(similarity * 100)}`,
+                similarityTitle: 'This score indicates a very low similarity between the user input and the document content.'
             };
         }
     }
@@ -121,7 +148,7 @@ export function ChatHistory ({
             // Render citations description, including the number of citations, a list of pages, the top similarity strength, and a button to show citations
             const pages = citations.map(citation => citation.page);
             const uniquePages = [...new Set(pages)];
-            const { similarityColor, similarityText } = similarityDisp(citations[0].similarity);
+            const { similarityColor, similarityText, similarityTitle } = similarityDisp(citations[0].similarity);
             return (
                 <div className="w-full flex justify-between items-center text-xs text-left italic text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 p-2 rounded">
                     <div className="mr-1">{citations.length} Citations</div>
@@ -130,7 +157,7 @@ export function ChatHistory ({
                                 <span key={`p-${index}`} className="mr-1">{page}, </span>
                         ))}
                     </span>
-                    <div className={`flex items-center ${similarityColor}`}>{similarityText}</div>
+                    <div title={similarityTitle} className={`flex items-center ${similarityColor}`}>{similarityText}</div>
                     <button onClick={() => handleShowCitations()} className="flex items-center justify-center h-5 w-5 relative text-sm text-gray-900 dark:text-gray-100">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -152,14 +179,13 @@ export function ChatHistory ({
                         </button>
                     </div>
                     {citations.map((citation, index) => {
-                        const { similarityColor, similarityText } = similarityDisp(citation.similarity);
-                        console.log(citation, similarityColor, similarityText);
+                        const { similarityColor, similarityText, similarityTitle } = similarityDisp(citation.similarity);
                         return (
                             <div key={`cit-${index}`} className={`flex flex-col items-center justify-between p-2 cursor-pointer rounded-md hover:bg-gray-400 hover:dark:bg-gray-500`} onClick={() => handleSelectCitation(citation)}>
                                 <div className="flex w-full justify-between p-1">
                                     <div className="font-bold w-3/4">{citation.title}</div>
                                     <div className="text-xs w-1/12">p. {citation.page}</div>
-                                    <div className={`text-xs w-1/12 ${similarityColor}`}>{similarityText}</div>
+                                    <div title={similarityTitle} className={`text-xs w-1/12 ${similarityColor}`}>{similarityText}</div>
                                     <button onClick={() => handleShowCitationSummary(citation)} className="w-4 h-4">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={citation === selectedCitation && showCitationSummary ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
