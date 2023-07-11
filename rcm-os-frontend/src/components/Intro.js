@@ -25,9 +25,9 @@ export function Intro({ handleFileChange, handleFileDrop, handleTestingButtonCli
                     <input type='file' className="hidden" onChange={handleFileChange} />
                 </label>
             </div>
-            <button onClick={handleTestingButtonClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
+            {/* <button onClick={handleTestingButtonClick} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded">
                 Run LLM Processing with Pre-Processed Textract Record
-            </button>
+            </button> */}
         </div>
     ) : (
         <div>
