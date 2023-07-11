@@ -98,6 +98,11 @@ export default function Home() {
         setInputModalOpen(!inputModalOpen);
     };
 
+    const handleInputTemplateSelect = (template) => {
+        console.log(template);
+        setInputTemplateId(template.id);
+    };
+
     return (
         <div className="flex h-full bg-white dark:bg-gray-900">
             <Sidebar setAppStage={changeAppState}/>
@@ -127,7 +132,7 @@ export default function Home() {
                         <ChatInterface />
                     </CSSTransition>
             </main>
-            {inputModalOpen && <InputTemplateModal onClose={toggleInputModal} onTemplateSelect={setInputTemplateId} />}
+            {inputModalOpen && <InputTemplateModal onClose={toggleInputModal} onTemplateSelect={handleInputTemplateSelect} />}
         </div>
     )
 }

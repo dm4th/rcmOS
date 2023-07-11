@@ -2,3 +2,7 @@ INSERT INTO "auth"."users" (instance_id,id,aud,role,email,encrypted_password,ema
 VALUES
     ('00000000-0000-0000-0000-000000000000','6d77258e-99e0-42a6-81c0-cbcae209eca5','authenticated','authenticated','danny.mathieson233@gmail.com','$2a$10$Td.hwyhof5pb.LMMfZ/Nu.Nx2DftxIp.HAT8TUbhArzh1oxXFIm2S','2023-06-25 17:43:58.004753+00',NULL,'','2023-06-25 17:43:43.979242+00','',NULL,'','',NULL,'2023-07-05 21:08:49.756632+00','{"provider":"email","providers":["email"]}','{}',NULL,'2023-06-25 17:43:43.967116+00','2023-07-05 23:28:02.313811+00',NULL,NULL,'','',NULL,DEFAULT,'',0,NULL,'',NULL,FALSE,NULL),
     ('00000000-0000-0000-0000-000000000000','e81888ed-233f-412c-b3a4-f0a10588ad4f','authenticated','authenticated','camerontjames@gmail.com','$2a$10$.iaOZ4t6Irm.8/f5v9bic.QeTs0CSQ/8fLE.Co9mdYnF07g2M/9sa','2023-06-28 15:53:58.855036+00',NULL,'','2023-06-28 15:53:38.831899+00','',NULL,'','',NULL,'2023-06-28 18:22:40.922954+00','{"provider":"email","providers":["email"]}','{}',NULL,'2023-06-28 15:53:38.815051+00','2023-07-06 13:26:23.571309+00',NULL,NULL,'','',NULL,DEFAULT,'',0,NULL,'',NULL,FALSE,NULL);
+
+INSERT INTO "public"."input_templates" (id,user_id,title,description,role,goal,created_at)
+VALUES 
+    ("2f9626de-3e7b-4494-96bb-8337abdb49b2","6d77258e-99e0-42a6-81c0-cbcae209eca5","Example","patient medical records","Medical Documentation Specialist","understand the patient's medical history","2023-07-11 00:18:23.23136+00");
