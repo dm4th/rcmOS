@@ -21,7 +21,7 @@ async function handler(req: Request) {
     } 
 
     try {
-        const { pageData, recordId } = await req.json();
+        const { pageData, recordId, inputTemplate } = await req.json();
 
         // Create table level constants
         const pageNumber = pageData[0].page;
@@ -63,7 +63,7 @@ async function handler(req: Request) {
 
             // Loop over table sections and generate a summary for each
             for (let j = 0; j < tableMarkdownArray.length; j++) {
-                const tableSectionPrompt = tableSectionSummaryTemplate(tablePrompt, j, tableMarkdownArray[j]);
+                const tableSectionPrompt = tableSectionSummaryTemplate(tablePrompt, j, tableMarkdownArray[j], inputTemplate);
 
                 // Create LLM Chain
                 const llmChain = new LLMChain({
@@ -122,6 +122,7 @@ async function handler(req: Request) {
 
                 insertRows.push({
                     "record_id": recordId,
+                    "template_id": inputTemplate.id,
                     "page_number": pageNumber,
                     "section_type": "table",
                     "section_number": i,

@@ -4,7 +4,7 @@ import axios from 'axios';
 export const uploadFileAWS = async (file, stage, setUploadStage) => {
     if (!file) {
         // If no file is passed to the function, return hard-coded textract job id
-        const jobIds = "8eafdd46c1cfd22aa29828318d1756b55a195c22d78af20de6e6724f4b389418";
+        const jobIds = "d8d52da16679f70b4c2c8950bb8acfd288b4019d1b2f07067ef54ed4e7adccd8";
         setUploadStage((prevState) => {
             const newState = [...prevState];
             newState[stage].progress = 100;
@@ -204,16 +204,38 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
     returnLineBlocks = returnLineBlocks.concat([oldLineBlocks]);
     returnTableBlocks = returnTableBlocks.concat(oldTableBlocks);
     returnKvBlocks = returnKvBlocks.concat(oldKvBlocks);
+    
+    const textBlocks = returnLineBlocks;
+    
+    const tableBlocks = [];
+    for (let i = 0; i < returnTableBlocks.length; i++) {
+        const tablePage = returnTableBlocks[i].page;
+        while (tableBlocks.length < tablePage) {
+            tableBlocks.push([]);
+        }
+        tableBlocks[tablePage - 1].push(returnTableBlocks[i]);
+    }
+
+    const kvBlocks = [];
+    for (let i = 0; i < returnKvBlocks.length; i++) {
+        const kvPage = returnKvBlocks[i].page;
+        while (kvBlocks.length < kvPage) {
+            kvBlocks.push([]);
+        }
+        kvBlocks[kvPage - 1].push(returnKvBlocks[i]);
+    }
+
 
     setUploadStage((prevState) => {
         const newState = [...prevState];
         newState[stage].progress = 100;
         return newState;
     });
+    // return an array of arrays for each page of line blocks, an array of arrays for each page of table blocks, and an array of arrays for each page of kv blocks
     return {
-        returnLineBlocks,
-        returnTableBlocks,
-        returnKvBlocks,
+        textBlocks,
+        tableBlocks,
+        kvBlocks,
     };
 };
 

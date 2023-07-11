@@ -1,4 +1,4 @@
-export const createFileSupabase = async (jobId, file, inputTemplateId, toggleInputModal, user, supabaseClient, stage, setUploadStage) => {
+export const createFileSupabase = async (jobId, file, inputTemplateId, user, supabaseClient, stage, setUploadStage) => {
 
     // check if a record with this jobId already exists in the medical_records table
     // if so, set the id using setSupabaseId and return
@@ -13,21 +13,24 @@ export const createFileSupabase = async (jobId, file, inputTemplateId, toggleInp
         newState[stage].active=true;
         return newState;
     });
-    const { data, error } = await supabaseClient
+
+    const { data: existingRecord, error: existingRecordError } = await supabaseClient
         .from('medical_records')
-        .select('id, file_name')
-        .eq('textract_job_id', jobId);
-    if (error) {
-        alert(error);
+        .select('*')
+        .eq('textract_job_id', jobId)
+        .eq('template_id', inputTemplateId);
+    if (existingRecordError) {
+        console.error(existingRecordError);
         return;
     }
+    if (existingRecord.length > 0) {
+        console.log('record already exists in medical_records table');
 
-    if (data.length > 0) {
-        // If record is found, return the record id and reset all of the summary data in the page_summaries table
+        // reset summary embeddings
         const { error: resetError } = await supabaseClient
             .from('page_summaries')
             .delete()
-            .eq('record_id', data[0].id);
+            .eq('record_id', existingRecord[0].id);
         if (resetError) {
             console.error(resetError);
             return;
@@ -38,26 +41,31 @@ export const createFileSupabase = async (jobId, file, inputTemplateId, toggleInp
             newState[stage].progress = 100;
             return newState;
         });
-        return data[0];
+        return existingRecord[0].id;
     }
 
-    // TOGGLE THE INPUT MODAL HERE!!!
-    // prompt user for input template they'd like to use
-    await promptForInputTemplate(inputTemplateId, toggleInputModal);
-
     // upload file to supabase storage
-    const fileUrl = `${user.id}/${file.name}`;
-    const { error: uploadError } = await supabaseClient.storage
-        .from('records')
-        .upload(fileUrl, file);
-    if (uploadError) {
-        if (uploadError.statusCode === '409') {
-            console.log('File already exists in storage');
+    let fileUrl;
+    let fileName;
+    if (file) {
+        fileName = file.name;
+        fileUrl = `${user.id}/${fileName}`;
+        const { error: uploadError } = await supabaseClient.storage
+            .from('records')
+            .upload(fileUrl, file);
+        if (uploadError) {
+            if (uploadError.statusCode === '409') {
+                console.log('File already exists in storage');
+            }
+            else {
+                console.error(uploadError);
+                return;
+            }
         }
-        else {
-            console.error(uploadError);
-            return;
-        }
+    }
+    else {
+        fileName = 'Sample_Inpt_HR.pdf';
+        fileUrl = `${user.id}/${fileName}`;
     }
     setUploadStage((prevState) => {
         const newState = [...prevState];
@@ -66,14 +74,16 @@ export const createFileSupabase = async (jobId, file, inputTemplateId, toggleInp
     });
 
     // create new record in medical_records table
+    console.log('inserting record with template id: ', inputTemplateId);
     const { data: insertData, error: insertError } = await supabaseClient
         .from('medical_records')
         .insert([{ 
             textract_job_id: jobId,
             user_id: user.id,
-            file_name: file.name,
+            file_name: fileName,
             file_url: fileUrl,
-            content_embedding_progress: 0
+            content_embedding_progress: 0,
+            template_id: inputTemplateId,
         }])
         .select();
     if (insertError) {
@@ -85,18 +95,12 @@ export const createFileSupabase = async (jobId, file, inputTemplateId, toggleInp
         newState[stage].progress = 100;
         return newState;
     });
-    return insertData[0];
+    return insertData[0].id;
 };
 
-const promptForInputTemplate = async (templateId, toggleInputModal) => {
-    // toggle the input modal and wait for the templateId to change to something other than null
-    toggleInputModal();
-    while (templateId === null) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-};
+export const handleTextSummarySupabase = async (blocks, recordId, inputTemplate, supabaseClient, stage, setUploadStage) => {
 
-export const handleTextSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
+    console.log('text', blocks);
 
     const totalPages = blocks[blocks.length - 1][0].Page;
     for (const pageData of blocks) {
@@ -129,6 +133,7 @@ export const handleTextSummarySupabase = async (blocks, recordId, supabaseClient
         const requestBody = {
             pageData: preProcessedPageData,
             recordId,
+            inputTemplate,
         };
 
         // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
@@ -164,7 +169,9 @@ export const handleTextSummarySupabase = async (blocks, recordId, supabaseClient
     }
 };
 
-export const handleTableSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
+export const handleTableSummarySupabase = async (blocks, recordId, inputTemplate, supabaseClient, stage, setUploadStage) => {
+
+    console.log('table', blocks);
 
     const totalPages = blocks.length;
     for (const pageData of blocks) {
@@ -192,6 +199,7 @@ export const handleTableSummarySupabase = async (blocks, recordId, supabaseClien
         const requestBody = {
             pageData: preProcessedPageData,
             recordId,
+            inputTemplate,
         };
 
         // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
@@ -227,7 +235,9 @@ export const handleTableSummarySupabase = async (blocks, recordId, supabaseClien
     }
 };
 
-export const handleKvSummarySupabase = async (blocks, recordId, supabaseClient, stage, setUploadStage) => {
+export const handleKvSummarySupabase = async (blocks, recordId, inputTemplate, supabaseClient, stage, setUploadStage) => {
+
+    console.log('kv', blocks);
 
     const totalPages = blocks.length;
     for (const pageData of blocks) {
@@ -254,6 +264,7 @@ export const handleKvSummarySupabase = async (blocks, recordId, supabaseClient, 
         const requestBody = {
             pageData: preProcessedPageData,
             recordId,
+            inputTemplate
         };
 
         // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond

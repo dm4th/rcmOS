@@ -15,7 +15,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
     const [templates, setTemplates] = useState([]);
     const [templateLoading, setTemplateLoading] = useState(false);
 
-    const [modalState, setModalState] = useState('select'); // 'select', 'create', 'questions'
+    const [modalState, setModalState] = useState('select'); // 'select', 'create'
     const [transitioningState, setTransitioningState] = useState(false);
 
     const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -24,24 +24,21 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
     const [description, setDescription] = useState("");
     const [role, setRole] = useState("");
     const [goal, setGoal] = useState("");
-    const [questions, setQuestions] = useState(Array(5).fill(""));
 
     const [descriptionExamples, setDescriptionExamples] = useState([]);
     const [roleExamples, setRoleExamples] = useState([]);
     const [goalExamples, setGoalExamples] = useState([]);
-    const [questionsExamples, setQuestionsExamples] = useState([]);
 
     const [titleError, setTitleError] = useState("");
     const [descriptionError, setDescriptionError] = useState("");
     const [roleError, setRoleError] = useState("");
     const [goalError, setGoalError] = useState("");
-    const [questionsError, setQuestionsError] = useState(Array(5).fill(""));
 
     const getTemplates = async () => {
         setTemplateLoading(true);
         const { data, error } = await supabaseClient
             .from('input_templates')
-            .select('id, title')
+            .select('id, title, description, role, goal')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
         if (error) {
@@ -67,10 +64,6 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
         }
         else if (modalState === 'create') {
             handleCreateTemplate();
-            changeState('questions');
-        }
-        else {
-            handleAddQuestions();
             onClose();
         }
     };
@@ -78,6 +71,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
     const prevState = () => {
         if (modalState === 'create') {
             changeState('select');
+            setSelectedTemplate(templates[0]);
         }
         else {
             console.error("prev state err");
@@ -94,7 +88,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
 
     const handleSelectTemplate = () => {
         onTemplateSelect(selectedTemplate);
-        changeState('questions');
+        onClose();
     };
 
     const handleCreateTemplate = async () => {
@@ -111,12 +105,15 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
         if (error) {
             console.error(error);
         } else {
-            const newTemplateId = data[0];
+            const newTemplate = data[0];
             onTemplateSelect({
-                id: newTemplateId,
-                title
+                id: newTemplate.id,
+                title: newTemplate.title,
+                description: newTemplate.description,
+                role: newTemplate.role,
+                goal: newTemplate.goal
             });
-            nextState();
+            onClose();
         }
     };
 
@@ -194,6 +191,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black dark:bg-white opacity-50"></div>
+            {!templateLoading && 
             <div className="p-5 rounded-lg shadow-lg relative w-96 h-7/8 overflow-auto bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                 <CSSTransition
                     in={modalState === 'select' && !transitioningState}
@@ -205,7 +203,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
                         <h3 className="text-lg font-bold mb-2">Select an Existing Template</h3>
                         <select className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-900 leading-tight focus:outline-none focus:shadow-outline" id="template" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
                             {templates.map((template) => (
-                                <option key={template.id} value={template.id}>{template.title}</option>
+                                <option key={template.id} value={template}>{template.title}</option>
                             ))}
                         </select>
                         <button className="mt-2 bg-blue-500 hover:bg-blue-200 dark:hover:bg-blue-800 text-gray-900 dark:text-gray-100 font-bold py-2 px-4 rounded" onClick={handleSelectTemplate}>
@@ -228,9 +226,11 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
                     <div className='h-full'>
                         <div className="flex justify-between">
                             <h3 className="text-lg font-bold w-2/3">Create a New Template</h3>
+                            {templates.length > 0 && 
                             <button className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1 px-3 rounded inline-flex items-center" onClick={() => prevState()}>
                                 Back
                             </button>
+                            }
                         </div>
                         <div className='flex flex-col justify-between m-1 py-2'>
                             <label className="block text-gray-900 dark:text-gray-100 text-sm font-bold mb-2" htmlFor="title">
@@ -283,7 +283,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
                             {goalError.length > 0 && <p className="text-red-500 text-xs italic">{goalError}</p>}
                         </div>
                         <div className="flex flex-col items-center justify-center">
-                            <button className="my-2 bg-blue-500 hover:bg-blue-200 dark:hover:bg-blue-800 text-gray-900 dark:text-gray-100 font-bold py-2 px-4 rounded" onClick={nextState}>
+                            <button className="my-2 bg-blue-500 hover:bg-blue-200 dark:hover:bg-blue-800 text-gray-900 dark:text-gray-100 font-bold py-2 px-4 rounded" onClick={handleCreateTemplate}>
                                 Create Template
                             </button>
                             <p className="text-red-500 text-xs italic">You Cannot Go Back After Creation</p>
@@ -291,6 +291,7 @@ export function InputTemplateModal({ onClose, onTemplateSelect }) {
                     </div>
                 </CSSTransition>
             </div>
+            }
         </div>
     );
 }

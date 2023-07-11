@@ -106,10 +106,19 @@ export const documentCitationTemplate = ((citations: Citation[]) => {
 
 export const humanMessageTemplate = HumanMessagePromptTemplate.fromTemplate("USER PROMPT: {human_prompt}");
 
-export const pageSectionSummaryTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string) => {
+interface InputTemplate {
+    id: string;
+    title: string;
+    description: string;
+    role: string;
+    goal: string;
+};
+
+export const pageSectionSummaryTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string, inputTemplate: InputTemplate) => {
 
     return PromptTemplate.fromTemplate(
-        `Below is a markdown formatted table of text pulled from section ${sectionNumber} on page ${pageNumber} of a medical record using machine learning. The table contains the following columns:\n` +
+        `You are a ${inputTemplate.role} helping the user achieve their goal of ${inputTemplate.goal}.\n` +
+        `Below is a markdown formatted table of text pulled from section ${sectionNumber} on page ${pageNumber} of a ${inputTemplate.description} using machine learning. The table contains the following columns:\n` +
         "1. Text: The text retrieved from the document\n" +
         "2. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 99.5 should be viewed very cautiously.\n" +
         "3. Left: A percentage representing how far left on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
@@ -118,21 +127,21 @@ export const pageSectionSummaryTemplate = ((pageNumber: number | string, section
         "6. Height: A percentage representing how tall the text is on the page. 0% means the text has no height at all, 100% means the text spans the entire height of the page.\n" +
         "\nBelow is the data for the retrieved page:\n\n" +
         markdownTable +
-        "\n\nGiven the above information about the text retrieved from the document, what is the title of the page section and a 1 to 2 paragraph summary of the page section.\n" +
-        "In your summary please be as specific as possible about what information is contained in the text, and cite specific names, numbers, dates and other unique items explicitly.\n" +
+        `\n\nGiven the above information about the text retrieved from the ${inputTemplate.description}, what is the title of the page section and a 1 to 2 paragraph summary of the page section.\n` +
+        `In your summary please be as specific as possible about what information is contained in the text and how it pertains to the goal of ${inputTemplate.goal}. Cite specific names, numbers, dates and other unique items explicitly.\n` +
         "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
         "TITLE: <title of page section>\n" +
         "SUMMARY: <summary of page section>"
     );
 });
 
-export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber: number, markdownTable: string) => {
+export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber: number, markdownTable: string, inputTemplate: InputTemplate) => {
 
     return PromptTemplate.fromTemplate(
-        `Below is a description of section ${sectionNumber} of a table pulled from a medical record using machine learning. The table has the following characteristics:\n` +
+        `You are a ${inputTemplate.role} helping the user achieve their goal of ${inputTemplate.goal}.\n` +
+        `Below is a description of section ${sectionNumber} of a table pulled from a ${inputTemplate.description} using machine learning. The table has the following characteristics:\n` +
         tablePrompt +
         "\nBelow is a markdown formatted table describing the cells of data found in the described section of this table. Here are calumn descriptions for the markdown table:\n\n" +
-        // const markdownHeaders = ["Text", "Confidence", "Column Index", "Row Index", "Column Span", "Row Span"];
         "1. Text: The text retrieved from the cell in the table\n" +
         "2. Confidence: A percentage with 100% being very confident that the text pulled from the cell is correct. Anything below 50% should be viewed very cautiously.\n" +
         "3. Column Index: The column the cell appears in for the table.\n" +
@@ -141,8 +150,8 @@ export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber:
         "6. Row Span: How many rows in the table the given cell spans, starting from Row Index and going down.\n" +
         "\nBelow is the data for the retrieved section of the table:\n\n" +
         markdownTable +
-        "\n\nGiven the above information about the text and data retrieved from the table, what is the title of the information and a 1 to 2 paragraph summary of the table section.\n" +
-        "In your summary please be as specific as possible about what information is contained in the table, and cite specific names, numbers, dates and other unique items explicitly.\n" +
+        `\n\nGiven the above information about the text and data retrieved from the table of data in ${inputTemplate.description}, what is the title of the information and a 1 to 2 paragraph summary of the table section.\n` +
+        `In your summary please be as specific as possible about what information is contained in the table and how it pertains to the goal of ${inputTemplate.goal}. Cite specific names, numbers, dates and other unique items explicitly.\n` +
         "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
         "TITLE: <title of table section>\n" +
         "SUMMARY: <summary of table section>"
@@ -150,7 +159,7 @@ export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber:
 });
 
 
-export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNumber: number, markdownTable: string) => {
+export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNumber: number, markdownTable: string, inputTemplate: InputTemplate) => {
 
     let pageSection: string; 
     switch (sectionNumber) {
@@ -172,7 +181,8 @@ export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNu
 
 
     return PromptTemplate.fromTemplate(
-        `Below is a markdown formatted table of key value pairs in a form pulled from ${pageDesc} of a medical record using machine learning. The table contains the following columns:\n` +
+        `You are a ${inputTemplate.role} helping the user achieve their goal of ${inputTemplate.goal}.\n` +
+        `Below is a markdown formatted table of key value pairs in a form pulled from ${pageDesc} of a ${inputTemplate.description} using machine learning. The table contains the following columns:\n` +
         "1. Key: The key of the key value pair\n" +
         "2. Value: The value of the key value pair\n" +
         "3. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 50% should be viewed very cautiously.\n" +
@@ -182,8 +192,8 @@ export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNu
         "7. Bottom: A percentage representing how far down on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
         "\nBelow is the markdown table describing the key-value pair data on this part of the page:\n\n" +
         markdownTable +
-        "\n\nGiven the above information about the text retrieved from the document, what is the title of the form section and a 1 to 2 paragraph summary of the form section.\n" +
-        "In your summary please be as specific as possible about what information is contained in the form section, and cite specific names, numbers, dates and other unique items explicitly.\n" +
+        `\n\nGiven the above information about the text retrieved from the ${inputTemplate.description}, what is the title of the form section and a 1 to 2 paragraph summary of the form section.\n` +
+        `In your summary please be as specific as possible about what information is contained in the form section and how it pertains to the goal of ${inputTemplate.goal}. Cite specific names, numbers, dates and other unique items explicitly.\n` +
         "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
         "TITLE: <title of form section>\n" +
         "SUMMARY: <summary of form section>"
@@ -518,13 +528,6 @@ export const kvMarkdownTableGenerator = ((columns: string[], data: kvPair[]) => 
 
     return returnArray;
 });
-
-
-
-
-
-
-
 
 
 const getTokenCount = ((text: string) => {

@@ -19,7 +19,7 @@ async function handler(req: Request) {
     } 
 
     try {
-        const { pageData, recordId } = await req.json();
+        const { pageData, recordId, inputTemplate } = await req.json();
 
         // First pull the page number from the pageData first element
         const pageNumber = pageData[0].page;
@@ -93,7 +93,7 @@ async function handler(req: Request) {
                 });
 
                 // Generate the prompt for the LLM
-                const sectionPrompt = kvSectionSummaryTemplate(pageNumber, i, kvMarkdownArray[j].text);
+                const sectionPrompt = kvSectionSummaryTemplate(pageNumber, i, kvMarkdownArray[j].text, inputTemplate);
 
                 // Create LLM Chain
                 const sectionChain = new LLMChain({
@@ -155,6 +155,7 @@ async function handler(req: Request) {
                 // add rows to insertRows array
                 insertRows.push({
                     "record_id": recordId,
+                    "template_id": inputTemplate.id,
                     "page_number": pageNumber,
                     "section_number": i,
                     "title": title,
@@ -177,6 +178,7 @@ async function handler(req: Request) {
             .select();
 
         if (error) {
+            console.log(error);
             throw new Error(error.message);
         }
 

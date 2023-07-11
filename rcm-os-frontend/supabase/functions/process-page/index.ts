@@ -19,7 +19,7 @@ async function handler(req: Request) {
     } 
 
     try {
-        const { pageData, recordId } = await req.json();
+        const { pageData, recordId, inputTemplate } = await req.json();
 
         // First pull the page number from the pageData first element
         const pageNumber = pageData[0].page;
@@ -60,7 +60,7 @@ async function handler(req: Request) {
         // Create async promises to summarize the page markdown using the LLM
         const pagePromises = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
-            const sectionPrompt = pageSectionSummaryTemplate(pageNumber, i, pageMarkdownArray[i].text);
+            const sectionPrompt = pageSectionSummaryTemplate(pageNumber, i, pageMarkdownArray[i].text, inputTemplate);
 
             // Create LLM Chain
             const sectionChain = new LLMChain({
@@ -70,11 +70,6 @@ async function handler(req: Request) {
 
             // Run the LLM Chain
             pagePromises.push(sectionChain.call({}));
-            // const sectionOutputText = sectionOutput.text;
-
-            // console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
-
-            // pageSections.push(sectionOutputText);
         }
 
         // Wait for all the page section summaries to be generated
@@ -125,6 +120,7 @@ async function handler(req: Request) {
 
             insertRows.push({
                 "record_id": recordId,
+                "template_id": inputTemplate.id,
                 "page_number": pageNumber,
                 "section_type": "text",
                 "section_number": i,

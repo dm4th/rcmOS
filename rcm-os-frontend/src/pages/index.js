@@ -11,7 +11,8 @@ import { InputTemplateModal } from '@/components/InputTemplateModal';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
-import { processFile } from '@/lib/fileProcessing';
+import { uploadFileAWS, textractOCR } from '@/lib/aws';
+import { createFileSupabase, handleTextSummarySupabase, handleTableSummarySupabase, handleKvSummarySupabase } from '@/lib/supabase';
 
 const awsProcessingStages = [
     { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
@@ -34,26 +35,34 @@ export default function Home() {
     const [transitioningState, setTransitioningState] = useState(false);
 
     const [file, setFile] = useState(null);
+    const [jobId, setJobId] = useState(null);
+    const [recordId, setRecordId] = useState(null);
+
+    const [textBlocks, setTextBlocks] = useState(null);
+    const [tableBlocks, setTableBlocks] = useState(null);
+    const [kvBlocks, setKvBlocks] = useState(null);
 
     const [inputModalOpen, setInputModalOpen] = useState(false);
-    const [inputTemplateId, setInputTemplateId] = useState(null);
+    const [inputTemplate, setInputTemplate] = useState(null);
 
     const [uploadStageAWS, setUploadStageAWS] = useState(awsProcessingStages);
     const [uploadStageSupabase, setUploadStageSupabase] = useState(supabaseProcessingStages);
 
     useEffect(() => {
-        const processFileAsync = async () => {
-            // Helper function to go through each stage of the processing cycle
-            await processFile(file, inputTemplateId, toggleInputModal, user, supabaseClient, changeDoc, changeChat, setUploadStageAWS, setUploadStageSupabase);
-            changeAppState('chat');
-        };
-
-        if (appStage === 'processing') {
-            processFileAsync();
-        } else {
+        if (appStage !== 'processing') {
+            // reset all states
             setUploadStageAWS(awsProcessingStages);
             setUploadStageSupabase(supabaseProcessingStages);
+            setFile(null);
+            setJobId(null);
+            setRecordId(null);
+            setTextBlocks(null);
+            setTableBlocks(null);
+            setKvBlocks(null);
+            setInputTemplate(null);  
         }
+
+         
     }, [appStage]);
 
     useEffect(() => {
@@ -68,30 +77,138 @@ export default function Home() {
         }
     }, [chat]);
 
+    useEffect(() => {
+        if (file) {
+            changeAppState('processing');
+            uploadFileAWS(file, 0, setUploadStageAWS).then((jobId) => {
+                setJobId(jobId);
+            });
+        }
+    }, [file]);
+
+    useEffect(() => {
+        if (jobId && !inputTemplate) {
+            toggleInputModal();
+            textractOCR(jobId, 1, 2, setUploadStageAWS).then((ocrResult) => {
+                if (!ocrResult) {
+                    alert('AWS Error');
+                }
+                setTextBlocks(ocrResult.textBlocks);
+                setTableBlocks(ocrResult.tableBlocks);
+                setKvBlocks(ocrResult.kvBlocks);
+            });
+        }
+    }, [jobId]);
+
+    useEffect(() => {
+        if (jobId && inputTemplate) {
+            createFileSupabase(jobId, file, inputTemplate.id, user, supabaseClient, 0, setUploadStageSupabase).then((recordId) => {
+                setRecordId(recordId);
+            });
+        }
+    }, [inputTemplate, jobId]);
+
+    useEffect(() => {
+        if (recordId && textBlocks) {
+            setUploadStageSupabase((prevState) => {
+                const newState = [...prevState];
+                newState[1].active=true;
+                return newState;
+            });
+            handleTextSummarySupabase(textBlocks, recordId, inputTemplate, supabaseClient, 1, setUploadStageSupabase);
+        }
+    }, [recordId, textBlocks]);
+
+    useEffect(() => {
+        if (recordId && tableBlocks) {
+            setUploadStageSupabase((prevState) => {
+                const newState = [...prevState];
+                newState[2].active=true;
+                return newState;
+            });
+            handleTableSummarySupabase(tableBlocks, recordId, inputTemplate, supabaseClient, 2, setUploadStageSupabase);
+        }
+    }, [recordId, tableBlocks]);
+
+    useEffect(() => {
+        if (recordId && kvBlocks) {
+            setUploadStageSupabase((prevState) => {
+                const newState = [...prevState];
+                newState[3].active=true;
+                return newState;
+            });
+            handleKvSummarySupabase(kvBlocks, recordId, inputTemplate, supabaseClient, 3, setUploadStageSupabase);
+        }
+    }, [recordId, kvBlocks]);
+
+    useEffect(() => {
+        const createNewChat = async (id) => {
+            // update medical record content_embedding_progress to 100
+            const { data: progressData, error: progressError } = await supabaseClient
+                .from('medical_records')
+                .update({ content_embedding_progress: 100 })
+                .eq('id', id)
+                .select();
+            if (progressError) {
+                console.error(progressError);
+                return;
+            }
+            await changeDoc(progressData[0].id);
+
+            // create a new chat record for the document
+            const { data: chatData, error: chatError } = await supabaseClient
+                .from('document_chats')
+                .insert([{ 
+                    record_id: recordId,
+                    user_id: user.id,
+                    title: 'Initial Chat',
+                }])
+                .select();
+            if (chatError) {
+                console.error(chatError);
+                return;
+            }
+            await changeChat(chatData[0].id);
+        };
+
+
+        if (uploadStageSupabase[1].progress === 100 && uploadStageSupabase[2].progress === 100 && uploadStageSupabase[3].progress === 100) {
+            createNewChat(recordId);    
+            changeAppState('chat');     
+        }
+    }, [uploadStageSupabase]);
+
     const changeAppState = (newState) => {
         setTransitioningState(true);
         setTimeout(() => {
             setAppStage(newState);
             setTransitioningState(false);
         }, 300);
-    }
+    };
+
+    const processFileAsync = async () => {
+        changeAppState('processing');
+        uploadFileAWS(null, 0, setUploadStageAWS).then((jobId) => {
+            setJobId(jobId);
+        });
+    };
 
     const handleFileChange = (e) => {
         const file = e.target.files[0];
-        setFile(file);
         changeAppState('processing');
+        setFile(file);
     };
 
     const handleFileDrop = (e) => {
         e.preventDefault();
         const file = e.dataTransfer.files[0];
-        setFile(file);
         changeAppState('processing');
+        setFile(file);
     };
 
     const handleTestingButtonClick = () => {
-        setFile(null);
         changeAppState('processing');
+        processFileAsync(null);
     };
 
     const toggleInputModal = () => {
@@ -99,8 +216,7 @@ export default function Home() {
     };
 
     const handleInputTemplateSelect = (template) => {
-        console.log(template);
-        setInputTemplateId(template.id);
+        setInputTemplate(template);
     };
 
     return (

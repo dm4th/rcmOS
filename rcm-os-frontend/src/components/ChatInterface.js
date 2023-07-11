@@ -17,6 +17,7 @@ export function ChatInterface({ }) {
     // Get Supabase User context
     const { user, doc, chat, supabaseClient } = useSupaUser();
 
+    const [initialized, setInitialized] = useState(false);
     const [messages, setMessages] = useState([]);
     const [latestUserMessage, setLatestUserMessage] = useState('');
     const [latestResponse, setLatestResponse] = useState('');
@@ -27,6 +28,7 @@ export function ChatInterface({ }) {
     const [citationLoading, setCitationLoading] = useState(false);
 
     const resetChatState = () => {
+        setInitialized(false);
         setMessages([]);
         setLatestUserMessage('');
         setLatestResponse('');
@@ -73,14 +75,17 @@ export function ChatInterface({ }) {
     }
 
     const onUserInput = async (userPrompt) => {
-        setMessages((prevMessages) => [
-            ...prevMessages,
-            {
-                prompt: latestUserMessage,
-                response: latestResponse,
-                messageId: latestMessageId,
-            }
-        ]);
+        if (initialized) {
+            setMessages((prevMessages) => [
+                ...prevMessages,
+                {
+                    prompt: latestUserMessage,
+                    response: latestResponse,
+                    messageId: latestMessageId,
+                }
+            ]);
+        }
+        setInitialized(true);
         setLatestUserMessage(userPrompt);
         setLatestResponse('');
         setLatestMessageId(null);

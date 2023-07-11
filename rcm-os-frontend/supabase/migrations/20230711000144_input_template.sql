@@ -32,3 +32,10 @@ GRANT ALL ON TABLE "public"."input_templates" TO "service_role";
 ALTER TABLE "public"."medical_records" ADD COLUMN "template_id" "uuid";
 
 ALTER TABLE "public"."medical_records" ADD CONSTRAINT "medical_records_template_fkey" FOREIGN KEY ("template_id") REFERENCES "public"."input_templates"("id");
+
+
+-- Change page summaries table to include id of the input template used to create the page summaries
+
+ALTER TABLE "public"."page_summaries" ADD COLUMN "template_id" "uuid";
+
+ALTER TABLE "public"."page_summaries" ADD CONSTRAINT "page_summaries_template_fkey" FOREIGN KEY ("template_id") REFERENCES "public"."input_templates"("id");
