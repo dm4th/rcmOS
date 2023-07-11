@@ -43,6 +43,18 @@ const SupaContextProvider = (props) => {
             }])
             .select();
 
+    const changeDocName = async (docId, newName) =>
+        supabase
+            .from('medical_records')
+            .update({ file_name: newName })
+            .eq('id', docId);
+
+    const changeChatName = async (chatId, newName) =>
+        supabase
+            .from('document_chats')
+            .update({ title: newName })
+            .eq('id', chatId);
+
     const updateAvailableDocuments = async () => {
         if (!user) return;
         try {
@@ -81,6 +93,11 @@ const SupaContextProvider = (props) => {
         }
         setDoc(newDoc);
     }
+
+    const writeDocTitle = async (docId, newTitle) => {
+        await changeDocName(docId, newTitle);
+        await updateAvailableDocuments();
+    };
 
     const getFileUrl = async () => {
         // store PDF file in state for rendering in PDF viewer
@@ -145,23 +162,9 @@ const SupaContextProvider = (props) => {
         setChat({ title: newChatData[0].title, id: newChatData[0].id });
     };
 
-    const writeChatTitle = async (newTitle) => {
-        if (chat.title === newTitle) return;
-        const { data: chatTitleData, error: chatTitleError } = await supabase
-            .from('document_chats')
-            .update({ title: newTitle })
-            .eq('id', chat.id)
-            .select();
-        if (chatTitleError) throw chatTitleError;
-        // update previous chat history now with new title
-        const updatedAvailableChats = availableChats.map((chat) => {
-            if (chat.id === chatTitleData[0].id) {
-                return { ...chat, title: chatTitleData[0].title };
-            }
-            return chat;
-        });
-        setAvailableChats(updatedAvailableChats);
-        setChat({ ...chat, title: chatTitleData[0].title });
+    const writeChatTitle = async (chatId, newTitle) => {
+        await changeChatName(chatId, newTitle);
+        await updateAvailableChats();
     };
 
     const handleLogin = () => {
@@ -243,10 +246,12 @@ const SupaContextProvider = (props) => {
         availableChats,
         chat,
         showLoginModal,
+        updateAvailableDocuments,
         changeDoc,
+        writeDocTitle,
         changeChat,
-        newChat,
         writeChatTitle,
+        newChat,
         handleLogin,
         handleCloseModal,
         supabaseClient: supabase,

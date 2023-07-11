@@ -29,7 +29,7 @@ const supabaseProcessingStages = [
 
 export default function Home() {
 
-    const { user, supabaseClient, changeDoc, chat, changeChat } = useSupaUser();
+    const { user, supabaseClient, availableDocuments, doc, changeDoc, chat, changeChat } = useSupaUser();
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
     const [transitioningState, setTransitioningState] = useState(false);
@@ -62,7 +62,9 @@ export default function Home() {
             setInputTemplate(null);  
         }
 
-         
+        if (appStage === 'chat' && !doc) {
+            changeDoc(availableDocuments[0]);
+        }
     }, [appStage]);
 
     useEffect(() => {
