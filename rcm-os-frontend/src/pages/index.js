@@ -42,6 +42,8 @@ export default function Home() {
     const [tableBlocks, setTableBlocks] = useState(null);
     const [kvBlocks, setKvBlocks] = useState(null);
 
+    const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+
     const [inputModalOpen, setInputModalOpen] = useState(false);
     const [inputTemplate, setInputTemplate] = useState(null);
 
@@ -188,6 +190,10 @@ export default function Home() {
         }, 300);
     };
 
+    const toggleSidebar = () => {
+        setIsSidebarVisible(!isSidebarVisible);
+    };
+
     const processFileAsync = async () => {
         changeAppState('processing');
         uploadFileAWS(null, 0, setUploadStageAWS).then((jobId) => {
@@ -221,9 +227,35 @@ export default function Home() {
         setInputTemplate(template);
     };
 
+    const ArrowLeft = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-5 w-5 text-gray-900 dark:text-gray-100 mr-[-8px]">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+    );
+    
+    const ArrowRight = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-5 w-5 text-gray-900 dark:text-gray-100 ml-[-8px]">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+    );
+    
+
+
     return (
         <div className="flex h-full bg-white dark:bg-gray-900">
-            <Sidebar setAppStage={changeAppState}/>
+            <CSSTransition
+                in={isSidebarVisible}
+                timeout={300}
+                classNames="sidebar"
+                unmountOnExit={true}
+            >
+                <Sidebar setAppStage={changeAppState} />
+            </CSSTransition>
+            <button onClick={toggleSidebar} className="flex justify-start m-1">
+                <div className={`flex bg-gray-100 dark:bg-gray-800 rounded border-2 border-gray-700 dark:border-gray-300 cursor-pointer ${isSidebarVisible ? 'pr-2' : 'pl-2'}`}>
+                    {isSidebarVisible ? <><ArrowLeft /><ArrowLeft /></> : <><ArrowRight /><ArrowRight /></>}
+                </div>
+            </button>
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center overflow-auto">
                     <CSSTransition
                         in={appStage === 'intro' && !transitioningState}
