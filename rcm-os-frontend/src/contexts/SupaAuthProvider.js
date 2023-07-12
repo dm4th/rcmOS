@@ -2,7 +2,14 @@ import { useEffect, useState, createContext, useContext } from 'react';
 import { useUser, useSessionContext } from '@supabase/auth-helpers-react';
 
 // Define the Default Role for non-logged in users here
-const DEFAULT_ROLE = 'intro';
+const DEFAULT_TEMPLATE = {
+    id: 'default',
+    title: 'Default Template',
+    description: "patient medical records",
+    role: "Medical Documentation Specialist",
+    goal: "Understand the patient's medical history"
+};
+    
 
 const UserContext = createContext(undefined);
 
@@ -100,6 +107,7 @@ const SupaContextProvider = (props) => {
             if (!newDoc) return;
         }
         setDoc(newDoc);
+        console.log(newDoc);
 
         if (newDoc.template_id) {
             const { data: templateData, error: templateError } = await getInputTemplate(newDoc.template_id);
@@ -234,6 +242,11 @@ const SupaContextProvider = (props) => {
             const fetchChatsAndFile = async () => {
                 const chats = await updateAvailableChats();
                 const fileUrl = await getFileUrl();
+                let template = null;
+                if (doc.template_id) {
+                    template = await getInputTemplate(doc.template_id);
+                    console.log(template.data[0]);
+                }
     
                 if (chats) {
                     setChat(chats[0]);
@@ -241,6 +254,13 @@ const SupaContextProvider = (props) => {
     
                 if (fileUrl) {
                     setFile(fileUrl);
+                }
+
+                if (template) {
+                    setInputTemplate(template.data[0]);
+                }
+                else {
+                    setInputTemplate(DEFAULT_TEMPLATE);
                 }
             };
     
