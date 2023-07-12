@@ -15,7 +15,7 @@ import { ChatHistory } from '@/components/ChatHistory';
 export function ChatInterface({ }) {
 
     // Get Supabase User context
-    const { user, doc, chat, supabaseClient } = useSupaUser();
+    const { user, doc, inputTemplate, chat, supabaseClient } = useSupaUser();
 
     const [initialized, setInitialized] = useState(false);
     const [messages, setMessages] = useState([]);
@@ -99,6 +99,7 @@ export function ChatInterface({ }) {
             prompt: userPrompt,
             chat_id: chat.id,
             record_id: doc.id,
+            input_template: inputTemplate,
             user_id: user.id,
         });
         await fetchEventSource(chatUrl, {

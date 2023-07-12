@@ -14,6 +14,7 @@ const SupaContextProvider = (props) => {
     const [availableDocuments, setAvailableDocuments] = useState([]);
     const [doc, setDoc] = useState(null);
     const [file, setFile] = useState(null);
+    const [inputTemplate, setInputTemplate] = useState(null);
     const [availableChats, setAvailableChats] = useState([]);
     const [chat, setChat] = useState(null);
     const [showLoginModal, setShowLoginModal] = useState(false);
@@ -21,9 +22,15 @@ const SupaContextProvider = (props) => {
     const getAvailableDocs = () => 
         supabase
             .from('medical_records')
-            .select('id, file_name, file_url, content_embedding_progress')
+            .select('id, file_name, file_url, template_id, content_embedding_progress')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
+
+    const getInputTemplate = (templateId) =>
+        supabase
+            .from('input_templates')
+            .select('id, title, description, role, goal')
+            .eq('id', templateId);
 
     const getChats = (d) =>
         supabase
@@ -62,7 +69,7 @@ const SupaContextProvider = (props) => {
             if (response.data.length > 0) {
                 // doc(s) exist
                 const docs = response.data.map((d) => {
-                    return { file_name: d.file_name, id: d.id, progress: d.content_embedding_progress, url: d.file_url };
+                    return { file_name: d.file_name, id: d.id, progress: d.content_embedding_progress, url: d.file_url, template_id: d.template_id };
                 });
                 setAvailableDocuments(docs);
                 return docs;
@@ -81,6 +88,7 @@ const SupaContextProvider = (props) => {
         if (!user || !docId) return;
         if (docId === 'new') {
             setDoc(null);
+            setInputTemplate(null);
             return;
         }
         let newDoc = availableDocuments.find((d) => d.id === docId);
@@ -92,6 +100,15 @@ const SupaContextProvider = (props) => {
             if (!newDoc) return;
         }
         setDoc(newDoc);
+
+        if (newDoc.template_id) {
+            const { data: templateData, error: templateError } = await getInputTemplate(newDoc.template_id);
+            if (templateError) throw templateError;
+            console.log(templateData[0]);
+            setInputTemplate(templateData[0]);
+        }
+
+        else setInputTemplate(null);
     }
 
     const writeDocTitle = async (docId, newTitle) => {
@@ -243,6 +260,7 @@ const SupaContextProvider = (props) => {
         availableDocuments,
         doc,
         file,
+        inputTemplate,
         availableChats,
         chat,
         showLoginModal,

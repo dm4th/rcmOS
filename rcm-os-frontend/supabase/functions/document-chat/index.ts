@@ -21,11 +21,12 @@ async function handler(req: Request) {
     } 
 
     try {
-        const { prompt: promptInit, chat_id, record_id, user_id } = await req.json();
+        const { prompt: promptInit, chat_id, record_id, input_template, user_id } = await req.json();
         const prompt = promptInit.trim();
         console.log("Prompt: ", prompt);
         console.log("Chat ID: ", chat_id);
         console.log("Record ID: ", record_id);
+        console.log(input_template);
         console.log("User ID: ", user_id);
 
         // check that the prompt passes openAi moderation checks
@@ -112,8 +113,10 @@ async function handler(req: Request) {
             throw chatHistoryError;
         }
 
+
+
         const chatPromptTemplate = ChatPromptTemplate.fromPromptMessages([
-            chatRolePrompt,
+            chatRolePrompt(input_template),
             chatHistoryTemplate(chatHistory),
             documentCitationTemplate(citations),
             humanMessageTemplate,

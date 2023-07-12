@@ -11,13 +11,23 @@ const KV_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
 
-export const chatRolePrompt = SystemMessagePromptTemplate.fromTemplate(
-    "You are a knowledgeable, intelligent assistant helping the user understand a questions they have about a medical record. " +
-    "Your goal is to provide a summary of cited passages that contextually fit with the user's prompt (shared below). " +
-    "You can use the chat history (also shared below) to help you understand the context of the user's prompt. Please focus on summarizing the cited information first and foremost though. " +
-    "You may not make up any information that is not explicitly stated in the cited passages. " +
-    "If no cited information is given, respond to the user's query letting them know that you do not know how to respond to their query. "
-);
+interface InputTemplate {
+    id: string;
+    title: string;
+    description: string;
+    role: string;
+    goal: string;
+}
+
+export const chatRolePrompt = ((inputTemplate: InputTemplate) => {
+    return SystemMessagePromptTemplate.fromTemplate(
+        `You are a ${inputTemplate.role} helping the user understand a questions they have about ${inputTemplate.description}.\n` +
+        `Your goal is to provide a summary of cited passages that contextually fit with the user's prompt (shared below) and their stated goal of ${inputTemplate.goal}.\n` +
+        "You can use the chat history (also shared below) to help you understand the context of the user's prompt. Please focus on summarizing the cited information first and foremost though.\n" +
+        "You may not make up any information that is not explicitly stated in the cited passages. You may come to conclusions about the cited information using your abilities as an LLM though.\n" +
+        "If no cited information is given, you may respond to the best of your ability but be sure to let the user know that you found no relevant information in the document.\n"
+    );
+});
 
 interface ChatHistory {
     prompt: string;
@@ -70,6 +80,7 @@ export const documentCitationTemplate = ((citations: Citation[]) => {
     }
 
     const citationsStart = "CITATIONS:\n\n"
+    const citationsEnd = "When you respond it is very important to not include the prompt or the preceding text 'CITATION: '. Simply add your summary of the information as if you were in normal conversation.\n\n";
     let tokenCount = gpt3Tokenizer.encode(citationsStart).length;
     let citationsString = "";
     for (let i = 0; i < citations.length; i++) {
