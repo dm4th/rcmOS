@@ -4,9 +4,13 @@ import React, { useState, useEffect } from 'react';
 // Component Imports
 import { CSSTransition } from 'react-transition-group';
 import { ClaimInput } from '@/components/claims/ClaimInput';
+import { ClaimProcessing } from '@/components/claims/ClaimProcessing';
 
 // Context Imports
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
+
+// Library Imports
+import { uploadAWS } from '@/lib/aws';
 
 export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
@@ -14,6 +18,8 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
     const [transitioningState, setTransitioningState] = useState(false);
 
+    const [progress, setProgress] = useState(0);
+    const [progressText, setProgressText] = useState('');
     const [claimId, setClaimId] = useState(null);
 
     const handleNextStage = () => {
@@ -24,7 +30,8 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         }, 300);
     };
 
-    const handleNewClaim = async (title) => {
+    const handleNewClaim = async (title, selectedDenialLetter, uploadedDenialLetter) => {
+        // Create New Claim
         const { data, error } = await supabaseClient
             .from('claims')
             .insert([
@@ -38,10 +45,37 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         if (error) {
             console.log(error);
         } else {
+            // Save claimId for later and start to process the new denial letter
             setClaimId(data[0].id);
+
+            // Move to next stage - denial letter processing
             handleNextStage();
+
+            // if both selected and uploaded denial letter, upload the uploaded one
+            if (uploadedDenialLetter) await handleDenialLetterUpload(uploadedDenialLetter);
+            else if (selectedDenialLetter) await handleSelctedDenialLetter(selectedDenialLetter);
+            else console.error('No denial letter selected or uploaded');
         }
     };
+
+    const handleDenialLetterUpload = async (file) => {
+        // Need to implement:
+        // 1. Upload file to AWS using the lib function
+        setProgressText('Uploading Denial Letter to AWS');
+        const { jobId, jobType } = await uploadAWS(file, 'letter', setProgress);
+        // 2. Make sure the file is uploaded to AWS and the processing job is kicked off
+        // 3. Change the processing function on the Lambda to check for faster text-only processing
+        // 4. Update the denial letter table with the new file name and the claim id
+        // 5. Return the new ID and change the state
+    };
+
+    const handleSelctedDenialLetter = async (denialLetterId) => {
+        // Need to implement:
+        // 1. Retrieve all relevant info from the denial letter table 
+        // 2. Create a new denial letter record with the same information and updated claim ID
+        // 3. Return the new ID and change the state
+    };
+
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -60,6 +94,14 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
                     unmountOnExit={true}
                 >
                     <ClaimInput handleSubmit={handleNewClaim} />
+                </CSSTransition>
+                <CSSTransition
+                    in={modalStage === 'denialProcessing' && !transitioningState}
+                    timeout={300}
+                    classNames="fade"
+                    unmountOnExit={true}
+                >
+                    <ClaimProcessing progressText={progressText} progress={progress} />
                 </CSSTransition>
             </div>
         </div>

@@ -13,6 +13,7 @@ export function ClaimInput({ handleSubmit }) {
     const [denialLetters, setDenialLetters] = useState([]);
     const [selectedDenialLetter, setSelectedDenialLetter] = useState(null);
     const [uploadedDenialLetter, setUploadedDenialLetter] = useState(null);
+    const [uploadedFileName, setUploadedFileName] = useState(null);
 
     // Handle input change
     const handleTitleChange = (e) => {
@@ -23,9 +24,15 @@ export function ClaimInput({ handleSubmit }) {
     const handleCreateClaim = () => {
         if (claim.length < 1) {
             setTitleError('Please enter a title for your claim');
-        } else if (titleError.length === 0 && uploadError.length === 0) {
+        } else if (titleError.length === 0) {
             handleSubmit(claim, selectedDenialLetter, uploadedDenialLetter);
         }
+    };
+
+    // Handle file upload
+    const handleFileUpload = (e) => {
+        setUploadedDenialLetter(e.target.files[0]);
+        setUploadedFileName(e.target.files[0].name);
     };
 
     useEffect(() => {
@@ -58,6 +65,7 @@ export function ClaimInput({ handleSubmit }) {
     useEffect(() => {
         if (selectedDenialLetter) {
             setUploadedDenialLetter(null);
+            setUploadedFileName(null);
         }
     }, [selectedDenialLetter]);
 
@@ -94,7 +102,7 @@ export function ClaimInput({ handleSubmit }) {
                 </>
             )}
             <div className='flex flex-col justify-between m-1 py-2'>
-                <div className="flex items-center justify-center">
+                <div className="flex flex-col items-center justify-center">
                     <label 
                         className="w-64 flex flex-col items-center px-4 py-6 bg-white text-blue rounded-lg shadow-lg tracking-wide uppercase border border-blue cursor-pointer hover:bg-gray-200 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700 dark:border-gray-700 dark:shadow-none"
                         onDrop={setUploadedDenialLetter}
@@ -104,8 +112,9 @@ export function ClaimInput({ handleSubmit }) {
                             <path d="M17 10h-4V0H7v10H3l7 7 7-7z" />
                         </svg>
                         <span className="mt-2 text-base leading-normal">Upload Denial Letter</span>
-                        <input type='file' className="hidden" onChange={setUploadedDenialLetter} />
+                        <input type='file' className="hidden" onChange={handleFileUpload} />
                     </label>
+                    {uploadedFileName && (<p className="text-gray-600 dark:text-gray-400 text-xs italic ml-2">{uploadedFileName}</p>)}
                 </div>
             </div>
             <button className="mt-2 bg-blue-500 hover:bg-blue-200 dark:hover:bg-blue-800 text-gray-900 dark:text-gray-100 font-bold py-2 px-4 rounded" onClick={handleCreateClaim}>

@@ -14,10 +14,8 @@ export default function Home() {
 
     const { user, isLoading } = useSupaUser();
 
-    const [transitioningState, setTransitioningState] = useState(false);
-
     const [inputModalOpen, setInputModalOpen] = useState(false);
-    const [inputModalState, setInputModalState] = useState('claim'); // claim, letter, medical, policy, data
+    const [inputModalState, setInputModalState] = useState('claim'); // claim, denialProcessing, medical, policy, data
 
     useEffect(() => {
         setInputModalOpen(false);
@@ -32,9 +30,9 @@ export default function Home() {
     const handleInputModalNextState = () => {
         switch (inputModalState) {
             case 'claim':
-                setInputModalState('letter');
+                setInputModalState('denialProcessing');
                 break;
-            case 'letter':
+            case 'denialProcessing':
                 setInputModalState('medical');
                 break;
             case 'medical':
@@ -56,7 +54,7 @@ export default function Home() {
     return (
         <div className="flex h-full bg-white dark:bg-gray-900">
             <CSSTransition
-                in={!user && !transitioningState && !isLoading}
+                in={!user && !isLoading}
                 timeout={300}
                 classNames="fade"
                 unmountOnExit={true}
@@ -66,7 +64,7 @@ export default function Home() {
                 </main>
             </CSSTransition>
             <CSSTransition
-                in={user && !transitioningState && !isLoading}
+                in={user && !isLoading}
                 timeout={300}
                 classNames="fade"
                 unmountOnExit={true}

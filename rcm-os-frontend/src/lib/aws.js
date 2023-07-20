@@ -20,7 +20,7 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
     }
     
     // Request Pre-Signed URL from API Gateway
-    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL, {
+    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL + 'record', {
         fileName: file.name,
     });
     const url = JSON.parse(urlRes.data.body).url;
@@ -46,17 +46,66 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
         return;
     }
 
-    // Kick off Textract Processing
-    const textractRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+    // Kick off File Processing
+    const processRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
         S3Object: {
-            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET,
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET + 'records',
             Name: file.name,
         },
     });
-    const jobId = JSON.parse(textractRes.data.body).JobId;
+    const jobId = JSON.parse(processRes.data.body).JobId;
 
     return jobId;
 };
+
+export const uploadAWS = async (file, resource, uploadCallback) => {
+    // Function to upload a file to AWS S3
+    // file: the file object to upload
+    // resource: the resource type to upload to (e.g. 'record', 'letter')
+    // uploadCallback: a function to update the upload progress
+
+    // If file type is not a pdf, return nothing
+    if (file.type !== 'application/pdf') {
+        alert('Please upload a PDF file.');
+        return;
+    }
+
+    // Request Pre-Signed URL from API Gateway
+    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL + resource, {
+        fileName: file.name,
+    });
+    const url = JSON.parse(urlRes.data.body).url;
+
+    // Upload file to S3 with Pre-Signed URL
+    const uploadRes = await axios.put(url, file, {
+        headers: {
+            'Content-Type': 'application/pdf',
+        },
+        onUploadProgress: (progressEvent) => {
+            const { loaded, total } = progressEvent;
+            const percent = Math.floor((loaded / total) * 100);
+            uploadCallback(percent);
+        }
+    });
+
+    if (uploadRes.status !== 200) {
+        alert('Error uploading file to S3');
+        return;
+    }
+
+    // Kick off File Processing
+    const processingRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
+        S3Object: {
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET + resource + 's',
+            Name: file.name,
+        },
+    });
+
+    const jobId = JSON.parse(processingRes.data.body).JobId;
+    const jobType = JSON.parse(processingRes.data.body).JobType;
+
+    return { jobId, jobType };
+}
 
 export const textractOCR = async (jobId, pollStageId, retrieveStageId, setUploadStage) => {
     // Poll Textract Job Status
