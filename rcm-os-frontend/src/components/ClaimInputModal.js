@@ -18,8 +18,8 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
     const [transitioningState, setTransitioningState] = useState(false);
 
-    const [progress, setProgress] = useState(0);
-    const [progressText, setProgressText] = useState('');
+    const [progressValues, setProgressValues] = useState(null);
+    const [progressTitle, setProgressTitle] = useState('');
     const [claimId, setClaimId] = useState(null);
 
     const handleNextStage = () => {
@@ -61,8 +61,26 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
     const handleDenialLetterUpload = async (file) => {
         // Need to implement:
         // 1. Upload file to AWS using the lib function
-        setProgressText('Uploading Denial Letter to AWS');
-        const { jobId, jobType } = await uploadAWS(file, 'letter', setProgress);
+        setProgressTitle('Processing Denial Letter on AWS');
+        setProgressValues([
+            { text: 'Uploading File to AWS', progress: 0},
+            { text: 'Extracting Text from File', progress: 0},
+        ]);
+        const uploadCallback = (progress) => {
+            setProgressValues((prev) => {
+                const newProgressValues = [...prev];
+                newProgressValues[0].progress = progress;
+                return newProgressValues;
+            });
+        };
+        const processingCallback = (progress) => {
+            setProgressValues((prev) => {
+                const newProgressValues = [...prev];
+                newProgressValues[1].progress = progress;
+                return newProgressValues;
+            });
+        };
+        const { jobId, jobType } = await uploadAWS(file, 'letter', uploadCallback, processingCallback);
         // 2. Make sure the file is uploaded to AWS and the processing job is kicked off
         // 3. Change the processing function on the Lambda to check for faster text-only processing
         // 4. Update the denial letter table with the new file name and the claim id
@@ -101,7 +119,7 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
                     classNames="fade"
                     unmountOnExit={true}
                 >
-                    <ClaimProcessing progressText={progressText} progress={progress} />
+                    <ClaimProcessing progressTitle={progressTitle} progressValues={progressValues} />
                 </CSSTransition>
             </div>
         </div>

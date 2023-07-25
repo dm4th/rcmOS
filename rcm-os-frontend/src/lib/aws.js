@@ -103,8 +103,9 @@ export const uploadAWS = async (file, resource, uploadCallback) => {
 
     const jobId = JSON.parse(processingRes.data.body).JobId;
     const jobType = JSON.parse(processingRes.data.body).JobType;
+    const jobOutput = JSON.parse(processingRes.data.body).JobOutput;
 
-    return { jobId, jobType };
+    return { jobId, jobType, jobOutput };
 }
 
 export const textractOCR = async (jobId, pollStageId, retrieveStageId, setUploadStage) => {

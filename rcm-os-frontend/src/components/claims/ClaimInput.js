@@ -35,6 +35,14 @@ export function ClaimInput({ handleSubmit }) {
         setUploadedFileName(e.target.files[0].name);
     };
 
+    // Handle file drag and drop
+    const handleFileDrop = (e) => {
+        e.preventDefault();
+        const file = e.dataTransfer.files[0];
+        setUploadedDenialLetter(file);
+        setUploadedFileName(file.name);
+    };
+
     useEffect(() => {
         const fetchDenialLetters = async () => {
             const { data, error } = await supabaseClient
@@ -105,7 +113,7 @@ export function ClaimInput({ handleSubmit }) {
                 <div className="flex flex-col items-center justify-center">
                     <label 
                         className="w-64 flex flex-col items-center px-4 py-6 bg-white text-blue rounded-lg shadow-lg tracking-wide uppercase border border-blue cursor-pointer hover:bg-gray-200 dark:bg-gray-800 dark:text-white dark:hover:bg-gray-700 dark:border-gray-700 dark:shadow-none"
-                        onDrop={setUploadedDenialLetter}
+                        onDrop={handleFileDrop}
                         onDragOver={(e) => e.preventDefault()}
                     >
                         <svg className="w-8 h-8" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">

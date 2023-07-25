@@ -1,9 +1,18 @@
-export function ClaimProcessing({ progressText, progress }) {
+export function ClaimProcessing({ progressTitle, progressValues }) {
+    // Component to render the progress of the claim processing with multiple stages
+    // progressTitle: string
+    // progressValues: array of progress values for each stage
+    // each progress value has a text and progress value
     return (
         <div className="flex flex-col justify-between m-2 ">
             <div className="flex flex-col items-center justify-center my-2">
-                <progress className={`progress-bar`} value={progress} max={100} />
-                <p className="text-gray-600 dark:text-gray-400 text-xs italic">{progressText}</p>
+                <h3 className="text-2xl text-gray-900 dark:text-white p-2">{progressTitle}</h3>
+                {progressValues.map((stage, index) => (
+                    <div key={`stage-${index}`} className="flex flex-col items-center justify-center my-2">
+                        <progress className={`progress-bar`} value={stage.progress} max={100} />
+                        <p className="text-gray-600 dark:text-gray-400 text-xs italic">{stage.text}</p>
+                    </div>
+                ))}
             </div>
         </div>
     );
