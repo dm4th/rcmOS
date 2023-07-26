@@ -108,29 +108,19 @@ export const uploadAWS = async (file, resource, uploadCallback) => {
     return { jobId, jobType, jobOutput };
 }
 
-export const textractOCR = async (jobId, pollStageId, retrieveStageId, setUploadStage) => {
+export const textractOCR = async (jobId, pollingCallback, processingCallback) => {
     // Poll Textract Job Status
     console.log(jobId);
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[pollStageId].active = true;
-        return newState;
-    });
-    const pages = await pollJobAWS(jobId, pollStageId, setUploadStage);
+    const pages = await pollJobAWS(jobId, pollingCallback);
     if (!pages) return;
 
     // Retrieve Full Textract Results
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[retrieveStageId].active = true;
-        return newState;
-    });
-    const results = await getResultsAWS(jobId, retrieveStageId, setUploadStage);
+    const results = await getResultsAWS(jobId, processingCallback);
     if (!results) return;
     return results;
 };
 
-const pollJobAWS = async (jobId, stage, setUploadStage) => {
+const pollJobAWS = async (jobId, pollingCallback) => {
     // Poll Textract Job Status
     let jobStatus = 'IN_PROGRESS';
     let statusRes;
@@ -141,25 +131,18 @@ const pollJobAWS = async (jobId, stage, setUploadStage) => {
             setTimeout(resolve, 2000);
         });
 
-        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
             JobId: jobId,
         });
         jobStatus = JSON.parse(statusRes.data.body).JobStatus;
-        uploadTracker++;
         if (uploadTracker >= 95) {
-            setUploadStage((prevState) => {
-                const newState = [...prevState];
-                newState[stage].stage = 'Processing Document with AWS Textract - Taking Longer than Expected';
-                newState[stage].progress = 95;
-                return newState;
-            });
+            uploadTracker = uploadTracker + 0.1;
+            pollingCallback(uploadTracker);
         }
-        else setUploadStage((prevState) => {
-            const newState = [...prevState];
-            newState[stage].stage = 'Processing Document with AWS Textract';
-            newState[stage].progress = uploadTracker;
-            return newState;
-        });
+        else {
+            uploadTracker++;
+            pollingCallback(uploadTracker);
+        }
     }
 
     // If job status is not SUCCEEDED, return null
@@ -169,16 +152,11 @@ const pollJobAWS = async (jobId, stage, setUploadStage) => {
         return null;
     }
 
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[stage].stage = 'Processing Document with AWS Textract';
-        newState[stage].progress = 100;
-        return newState;
-    });
+    pollingCallback(100);
     return JSON.parse(statusRes.data.body).Metadata.Pages;
 };
 
-const getResultsAWS = async (jobId, stage, setUploadStage) => {
+const getResultsAWS = async (jobId, processingCallback) => {
     // Retrieve Full Textract Results
     let nextToken = null;
     let first = true;
@@ -202,12 +180,12 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
         let jobRes;
         if (first) {
             first = false;
-            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
                 JobId: jobId,
             });
             totalPages = JSON.parse(jobRes.data.body).Metadata.Pages * 3.0; // Need to do each page three times
         } else {
-            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
                 JobId: jobId,
                 NextToken: nextToken,
             });
@@ -243,11 +221,7 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
         const maxTablePage = returnTableBlocks.length > 0 ? Math.max(...returnTableBlocks.map((block) => block.page)) : 0;
         const maxKvPage = returnKvBlocks.length > 0 ? Math.max(...returnKvBlocks.map((block) => block.page)) : 0;
         const processedPages = maxLinePage + maxTablePage + maxKvPage;
-        setUploadStage((prevState) => {
-            const newState = [...prevState];
-            newState[stage].progress = Math.floor((processedPages / totalPages) * 100);
-            return newState;
-        });
+        processingCallback(Math.floor((processedPages / totalPages) * 100));
     }
 
     // Handle any leftover blocks
@@ -276,11 +250,7 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
     }
 
 
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[stage].progress = 100;
-        return newState;
-    });
+    processingCallback(100);
     // return an array of arrays for each page of line blocks, an array of arrays for each page of table blocks, and an array of arrays for each page of kv blocks
     return {
         textBlocks,

@@ -10,7 +10,7 @@ import { ClaimProcessing } from '@/components/claims/ClaimProcessing';
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
 // Library Imports
-import { uploadAWS } from '@/lib/aws';
+import { textractOCR, uploadAWS } from '@/lib/aws';
 
 export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
@@ -64,7 +64,9 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         setProgressTitle('Processing Denial Letter on AWS');
         setProgressValues([
             { text: 'Uploading File to AWS', progress: 0},
-            { text: 'Extracting Text from File', progress: 0},
+            { text: 'Performing OCR on File', progress: 0},
+            { text: 'Extracting Data from OCR Job', progress: 0},
+            { text: 'Generating Denial Summary', progress: 0},
         ]);
         const uploadCallback = (progress) => {
             setProgressValues((prev) => {
@@ -73,18 +75,41 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
                 return newProgressValues;
             });
         };
-        const processingCallback = (progress) => {
+        const pollingCallback = (progress) => {
             setProgressValues((prev) => {
                 const newProgressValues = [...prev];
                 newProgressValues[1].progress = progress;
                 return newProgressValues;
             });
         };
-        const { jobId, jobType } = await uploadAWS(file, 'letter', uploadCallback, processingCallback);
-        // 2. Make sure the file is uploaded to AWS and the processing job is kicked off
-        // 3. Change the processing function on the Lambda to check for faster text-only processing
-        // 4. Update the denial letter table with the new file name and the claim id
-        // 5. Return the new ID and change the state
+        const processingCallback = (progress) => {
+            setProgressValues((prev) => {
+                const newProgressValues = [...prev];
+                newProgressValues[2].progress = progress;
+                return newProgressValues;
+            });
+        };
+        const summaryCallback = (progress) => {
+            setProgressValues((prev) => {
+                const newProgressValues = [...prev];
+                newProgressValues[3].progress = progress;
+                return newProgressValues;
+            });
+        };
+
+        // Upload the file to AWS and Kick Off Processing
+        // const { jobId, jobType, jobOutput } = await uploadAWS(file, 'letter', uploadCallback);
+        // const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
+        const jobId = 'e6c9326a7866300972750ed7e323d15bf34d0ab6b551e12d68ba373f3110b537';
+
+        // Perform OCR on the File using Textract
+        const { textBlocks, tableBlocks, kvBlocks } = await textractOCR(jobId, pollingCallback, processingCallback);
+        console.log(textBlocks);
+        console.log(tableBlocks);
+        console.log(kvBlocks);
+
+        // Upload the OCR results to Supabase
+
     };
 
     const handleSelctedDenialLetter = async (denialLetterId) => {
