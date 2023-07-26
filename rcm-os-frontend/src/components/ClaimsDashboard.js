@@ -22,8 +22,15 @@ export function ClaimsDashboard({ onNewClaim }) {
     };
 
     const handleClaimClick = (claimId) => {
-        router.push(`/claims/${claimId}`);
+        // router.push(`/claims/${claimId}`);
+        alert('Not implemented yet');
     };
+
+    function toTitleCase(str) {
+        return str.replace(/\w\S*/g, function(txt){
+            return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+        });
+    }    
 
     return (
         <div className='items-start'>
@@ -36,27 +43,27 @@ export function ClaimsDashboard({ onNewClaim }) {
                     <span>+</span>
                 </button>
             </div>
-            <div className="overflow-x-auto rounded">
+            <div className="overflow-auto rounded">
                 <table className="w-full text-md text-gray-900 dark:text-gray-100 bg-gray-200 dark:bg-gray-800 shadow-md rounded mb-4">
                     <thead className='bg-gray-400 dark:bg-gray-600 border-b rounded'>
                         <tr className='rounded'>
-                            <th className="text-left p-3 px-5">Claim Title</th>
-                            <th className="text-left p-3 px-5">Claim Status</th>
-                            <th className="text-left p-3 px-5">Medical Records</th>
-                            <th className="text-left p-3 px-5">Denial Letters</th>
-                            <th className="text-left p-3 px-5">Updated At</th>
-                            <th className="text-left p-3 px-5">Created At</th>
+                            <th className="text-center p-3 px-5">Claim Title</th>
+                            <th className="text-center p-3 px-5">Claim Status</th>
+                            <th className="text-center p-3 px-5">Denial Letters</th>
+                            <th className="text-center p-3 px-5">Medical Records</th>
+                            <th className="text-center p-3 px-5">Updated At</th>
+                            <th className="text-center p-3 px-5">Created At</th>
                         </tr>
                     </thead>
                     <tbody>
                         {availableClaims.map((claim) => (
-                            <tr className="border-b hover:bg-orange-100 bg-gray-100" key={claim.id}>
-                                <td className="p-3 px-5 cursor-pointer" onClick={() => handleClaimClick(claim.id)}>{claim.title}</td>
-                                <td className="p-3 px-5">{claim.status}</td>
-                                <td className="p-3 px-5">{claim.medical_records.length}</td>
-                                <td className="p-3 px-5">{claim.denial_letters.length}</td>
-                                <td className="p-3 px-5">{claim.updated_at}</td>
-                                <td className="p-3 px-5">{claim.created_at}</td>
+                            <tr className="claim-table-row border-b hover:bg-orange-100 bg-gray-100 text-gray-900" key={claim.id}>
+                                <td className="p-3 px-5 cursor-pointer text-blue-500 hover:underline" onClick={() => handleClaimClick(claim.id)}>{claim.title}</td>
+                                <td className="p-3 px-5">{toTitleCase(claim.status)}</td>
+                                <td className="p-3 px-5 cursor-pointer text-blue-500 hover:underline">{`${claim.denial_letters.length} Letters`}</td>
+                                <td className="p-3 px-5 cursor-pointer text-blue-500 hover:underline">{`${claim.medical_records.length} Records`}</td>
+                                <td className="p-3 px-5">{new Date(claim.updated_at).toLocaleString()}</td>
+                                <td className="p-3 px-5">{new Date(claim.created_at).toLocaleString()}</td>
                             </tr>
                         ))}
                     </tbody>

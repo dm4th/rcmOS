@@ -39,7 +39,7 @@ const SupaContextProvider = (props) => {
         if (claimsData.length > 0) {
             const claims = await Promise.all(claimsData.map(async (claim) => {
                 const { data: documentData, error: documentError } = await supabase
-                    .from('claims_documents')
+                    .from('claim_documents')
                     .select('*')
                     .eq('claim_id', claim.id);
                 if (documentError) throw documentError;
@@ -51,7 +51,6 @@ const SupaContextProvider = (props) => {
                 const medicalRecords = documents.filter((doc) => doc.type === 'medical_record');
                 return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: denialLetters, medical_records: medicalRecords };
             }));
-            console.log(claims);
             return claims;
         }
     }
@@ -102,10 +101,10 @@ const SupaContextProvider = (props) => {
     const updateAvailableClaims = async () => {
         if (!user) return;
         try {
-            const response = await getAvailableClaims();
-            if (response.data.length > 0) {
+            const claimData = await getAvailableClaims();
+            if (claimData.length > 0) {
                 // claim(s) exist
-                const claims = response.data.map((claim) => {
+                const claims = claimData.map((claim) => {
                     return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: claim.denial_letters, medical_records: claim.medical_records };
                 });
                 setAvailableClaims(claims);
@@ -261,20 +260,11 @@ const SupaContextProvider = (props) => {
         if (user && !isLoadingData) {
             // Login - get user details and chat history
             setIsloadingData(true);
-            Promise.allSettled([updateAvailableDocuments()]).then((results) => {
-                const availableDocsPromise = results[0];
-                if (availableDocsPromise.status === 'fulfilled') {
-                    if (availableDocsPromise.value) {
-                        setDoc(availableDocsPromise.value[0]);
-                    }
-                }
-            });
-            Promise.allSettled([updateAvailableChats()]).then((results) => {
-                const availableChatsPromise = results[0];
-                if (availableChatsPromise.status === 'fulfilled') {
-                    if (availableChatsPromise.value) {
-                        setChat(availableChatsPromise.value[0]);
-                    }
+            setClaim(null);
+            Promise.allSettled([updateAvailableClaims()]).then((results) => {
+                const availableClaimsPromise = results[0];
+                if (availableClaimsPromise.status !== 'fulfilled') {
+                    console.error(availableClaimsPromise.reason);
                 }
             });
             setIsloadingData(false);
@@ -319,8 +309,7 @@ const SupaContextProvider = (props) => {
             setAvailableChats([]);
             setChat(null);
         }
-    }, [doc]);
-    
+    }, [doc]);    
 
     const value = {
         accessToken,

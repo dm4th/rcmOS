@@ -54,7 +54,7 @@ CREATE TABLE "public"."denial_letters" (
     "file_name" "text" NOT NULL,
     "file_url" "text" NOT NULL,
     "summary" "text",
-    "content_processing_progress" "int4" NOT NULL,
+    "content_processing_progress" "numeric" NOT NULL,
     "content_processing_type" "text" NOT NULL,
     "content_processing_id" "text",
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
@@ -87,6 +87,19 @@ ON "public"."denial_letters"
 AS PERMISSIVE FOR INSERT
 TO anon
 WITH CHECK (true);
+
+-- Increment progress function for denial letters
+CREATE FUNCTION letter_progress_increment ("increment" numeric, "letter_id" uuid) 
+RETURNS void 
+LANGUAGE "plpgsql"
+AS
+$$
+BEGIN
+  UPDATE "public"."denial_letters"
+  SET "content_processing_progress" = "content_processing_progress" + "increment"
+  WHERE "id" = "letter_id";
+END;
+$$;
 
 -- Create view to get a combination of medical_record and denial_letter information in one query
 

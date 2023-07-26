@@ -1,3 +1,86 @@
+export const createDenialLetterSupabase = async (
+    file, 
+    claimId,
+    processingId,
+    textBlocks, 
+    tableBlocks, 
+    kvBlocks, 
+    user, 
+    supabaseClient, 
+    summaryCallback
+) => {
+    // start by uploading the file to supabase storage
+    // then create a new record in the denial_letters table
+    // then send the data blocks to the summarize-<datatype> edge function
+    // and finally use the summarize-letter edge function to summarize what the denial reason is
+
+    // upload file to supabase storage
+    const fileName = file.name;
+    const fileUrl = `${user.id}/${fileName}`;
+    const { error: uploadError } = await supabaseClient.storage
+        .from('letters')
+        .upload(fileUrl, file);
+    if (uploadError) {
+        if (uploadError.statusCode === '409') {
+            console.log('File already exists in storage');
+        }
+        else {
+            console.error(uploadError);
+            return;
+        }
+    }
+
+    // create new record in denial_letters table
+    const { data: insertData, error: insertError } = await supabaseClient
+        .from('denial_letters')
+        .insert([{
+            claim_id: claimId,
+            user_id: user.id,
+            file_name: fileName,
+            file_url: fileUrl,
+            content_processing_progress: 0,
+            content_processing_type: 'Textract',
+            content_processing_id: processingId ? processingId : null
+        }])
+        .select();
+    if (insertError) {
+        console.error(insertError);
+        return;
+    }
+    const denialLetterId = insertData[0].id;
+
+    // send data blocks to summarize-<datatype> edge function
+    const summaryCallbackWithSupabase = async (progressIncrement) => {
+        summaryCallback(progressIncrement);
+        const { error: updateError } = await supabaseClient
+            .rpc('letter_progress_increment', {increment: progressIncrement, id: denialLetterId});
+        if (updateError) {
+            console.error(updateError);
+        }
+    };
+
+    await Promise.allSettled([
+        summarizeLetterText(textBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        summarizeLetterTables(tableBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        summarizeLetterForms(kvBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+    ]).then((results) => {
+        results.forEach((result) => {
+            if (result.status === 'rejected') {
+                console.error(result.reason);
+            }
+        });
+    });
+
+    // summarize denial letter
+
+};
+
+const summarizeLetterText = async (blocks, recordId, supabaseClient, summaryCallback) => {};
+const summarizeLetterTables = async (blocks, recordId, supabaseClient, summaryCallback) => {};
+const summarizeLetterForms = async (blocks, recordId, supabaseClient, summaryCallback) => {};
+    
+
+
 export const createFileSupabase = async (jobId, file, inputTemplateId, user, supabaseClient, stage, setUploadStage) => {
 
     // check if a record with this jobId already exists in the medical_records table

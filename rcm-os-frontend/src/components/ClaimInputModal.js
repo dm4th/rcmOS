@@ -14,7 +14,7 @@ import { textractOCR, uploadAWS } from '@/lib/aws';
 
 export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
-    const { user, supabaseClient } = useSupaUser();
+    const { user, updateAvailableClaims, supabaseClient } = useSupaUser();
 
     const [transitioningState, setTransitioningState] = useState(false);
 
@@ -45,6 +45,9 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         if (error) {
             console.log(error);
         } else {
+            // Update available claims
+            await updateAvailableClaims();
+
             // Save claimId for later and start to process the new denial letter
             setClaimId(data[0].id);
 
@@ -89,10 +92,10 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
                 return newProgressValues;
             });
         };
-        const summaryCallback = (progress) => {
+        const summaryCallback = (progressIncrement) => {
             setProgressValues((prev) => {
                 const newProgressValues = [...prev];
-                newProgressValues[3].progress = progress;
+                newProgressValues[3].progress += progressIncrement;
                 return newProgressValues;
             });
         };
@@ -101,6 +104,7 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         // const { jobId, jobType, jobOutput } = await uploadAWS(file, 'letter', uploadCallback);
         // const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
         const jobId = 'e6c9326a7866300972750ed7e323d15bf34d0ab6b551e12d68ba373f3110b537';
+        uploadCallback(100);
 
         // Perform OCR on the File using Textract
         const { textBlocks, tableBlocks, kvBlocks } = await textractOCR(jobId, pollingCallback, processingCallback);
