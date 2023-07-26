@@ -126,4 +126,49 @@ CREATE VIEW "public"."claim_documents" AS
         created_at
     FROM "public"."denial_letters";
 
+-- Create table to store denial letter section information
 
+CREATE TABLE "public"."letter_sections" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "letter_id" "uuid" NOT NULL,
+    "page_number" "int4" NOT NULL,
+    "section_type" "text" NOT NULL,
+    "section_number" "int4" NOT NULL,
+    "sub_section_number" "int4",
+    "valid" "bool" NOT NULL,
+    "reason" "text" NOT NULL,
+    "section_embedding" "public"."vector" NOT NULL,
+    "left" "float4" NOT NULL,
+    "top" "float4" NOT NULL,
+    "right" "float4" NOT NULL,
+    "bottom" "float4" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE "public"."letter_sections" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."letter_sections"
+    ADD CONSTRAINT "letter_sections_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."letter_sections"
+    ADD CONSTRAINT "letter_sections_fkey" FOREIGN KEY ("letter_id") REFERENCES "public"."denial_letters"("id");
+
+ALTER TABLE "public"."letter_sections" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable ALL for service-role only" 
+ON "public"."letter_sections" 
+TO "service_role" 
+USING (true) 
+WITH CHECK (true);
+
+CREATE POLICY "Enable read access for anon" 
+ON "public"."letter_sections"
+AS PERMISSIVE FOR SELECT
+TO anon
+USING (true);
+
+CREATE POLICY "Enable insert access for anon" 
+ON "public"."letter_sections"
+AS PERMISSIVE FOR INSERT
+TO anon
+WITH CHECK (true);

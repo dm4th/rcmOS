@@ -113,7 +113,7 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         console.log(kvBlocks);
 
         // Upload the OCR results to Supabase
-
+        
     };
 
     const handleSelctedDenialLetter = async (denialLetterId) => {
