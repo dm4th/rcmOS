@@ -11,7 +11,7 @@ const KV_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
 
-export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string) => {
+export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber: number) => {
 
     return PromptTemplate.fromTemplate(
         `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
@@ -24,14 +24,15 @@ export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber:
         "5. Width: A percentage representing how far across the page the text spans. 0% means the text has no width at all, 100% means the text spans across the entire page.\n" +
         "6. Height: A percentage representing how tall the text is on the page. 0% means the text has no height at all, 100% means the text spans the entire height of the page.\n" +
         "\nBelow is the data for the retrieved page:\n\n" +
-        markdownTable +
+        "{markdownTable}" +
         `\n\nGiven the above information about the text retrieved from the denial letter, can you determine why the insurance claim was denied?\n` +
-        `If you cannot determine the reason for the denial, simply respond in the following format:` +
-        "VALID: No\n" +
-        "REASON: <reason for not being able to determine the reason for the denial>\n" +
+        `If you cannot determine a medical reason for the denial, simply respond in the following format:` +
+        "VALID: <Yes/No>\n" +
+        "REASON: <explanation for why you cannot determine the medical cause for the insurance claim denial>\n" +
         "Otherwise please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
-        "VALID: Yes\n" +
-        "REASON: <reason for the denial>"
+        "VALID: <Yes/No>\n" +
+        "REASON: <medical explanation of why the insurance claim was denied, citing specific evidence for your claim>" +
+        "Please only respond with VALID = Yes if you can determine the medical cause of the denial with a high degree of confidence. If you are not confident in your answer, please respond with VALID = No."
     );
 });
 

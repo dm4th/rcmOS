@@ -17,6 +17,7 @@ export const createDenialLetterSupabase = async (
     // upload file to supabase storage
     const fileName = file.name;
     const fileUrl = `${user.id}/${fileName}`;
+    console.log(fileUrl);
     const { error: uploadError } = await supabaseClient.storage
         .from('letters')
         .upload(fileUrl, file);
@@ -53,7 +54,7 @@ export const createDenialLetterSupabase = async (
     const summaryCallbackWithSupabase = async (progressIncrement) => {
         summaryCallback(progressIncrement);
         const { error: updateError } = await supabaseClient
-            .rpc('letter_progress_increment', {increment: progressIncrement, id: denialLetterId});
+            .rpc('letter_progress_increment', {increment: progressIncrement, letter_id: denialLetterId});
         if (updateError) {
             console.error(updateError);
         }
@@ -61,8 +62,8 @@ export const createDenialLetterSupabase = async (
 
     await Promise.allSettled([
         summarizeLetterText(textBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
-        summarizeLetterTables(tableBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
-        summarizeLetterForms(kvBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        // summarizeLetterTables(tableBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        // summarizeLetterForms(kvBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
     ]).then((results) => {
         results.forEach((result) => {
             if (result.status === 'rejected') {
@@ -75,7 +76,70 @@ export const createDenialLetterSupabase = async (
 
 };
 
-const summarizeLetterText = async (blocks, recordId, supabaseClient, summaryCallback) => {};
+const summarizeLetterText = async (blocks, letterId, supabaseClient, summaryCallback) => {
+    console.log('text', blocks);
+
+    const totalPages = blocks[blocks.length - 1][0].Page;
+    const progressIncrement = Math.floor((1 / totalPages) * 25); // 25% of the total progress bar
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].Page;
+        console.log(`Summarizing Letter Text page ${currentPage}`);
+
+        const preProcessedPageData = pageData.map((block) => {
+            if (block.BlockType === 'PAGE') {
+                return {
+                    blockType: block.BlockType,
+                    page: block.Page,
+                };
+            }
+            return {
+                blockType: block.BlockType,
+                confidence: block.Confidence,
+                text: block.Text,
+                left: block.Geometry.BoundingBox.Left,
+                top: block.Geometry.BoundingBox.Top,
+                width: block.Geometry.BoundingBox.Width,
+                height: block.Geometry.BoundingBox.Height,
+                page: block.Page,
+            };
+        });
+
+        // Send page data and page id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            letterId
+        };
+
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabaseClient.functions.invoke('summarize-text', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
+        }
+        summaryCallback(progressIncrement);
+    }
+};
 const summarizeLetterTables = async (blocks, recordId, supabaseClient, summaryCallback) => {};
 const summarizeLetterForms = async (blocks, recordId, supabaseClient, summaryCallback) => {};
     

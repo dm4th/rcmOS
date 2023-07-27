@@ -110,7 +110,6 @@ export const uploadAWS = async (file, resource, uploadCallback) => {
 
 export const textractOCR = async (jobId, pollingCallback, processingCallback) => {
     // Poll Textract Job Status
-    console.log(jobId);
     const pages = await pollJobAWS(jobId, pollingCallback);
     if (!pages) return;
 

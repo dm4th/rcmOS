@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
 import { textMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
-import { textSummaryTemplate } from '../_shared/letterSummaryTemplates.js';
+import { textSummaryTemplate } from '../_shared/letterSummaryTemplates.ts';
 import { OpenAI } from "https://esm.sh/langchain/llms/openai";
 import { LLMChain } from "https://esm.sh/langchain/chains";
 
@@ -61,7 +61,7 @@ async function handler(req: Request) {
         // Create async promises to summarize the page markdown using the LLM
         const pagePromises = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
-            const sectionPrompt = textSummaryTemplate(pageNumber, i, pageMarkdownArray[i].text);
+            const sectionPrompt = textSummaryTemplate(pageNumber, i);
 
             // Create LLM Chain
             const sectionChain = new LLMChain({
@@ -70,7 +70,7 @@ async function handler(req: Request) {
             });
 
             // Run the LLM Chain
-            pagePromises.push(sectionChain.call({}));
+            pagePromises.push(sectionChain.call({markdownTable: pageMarkdownArray[i].text}));
         }
 
         // Wait for all the page section summaries to be generated
@@ -116,7 +116,7 @@ async function handler(req: Request) {
             }
 
             // Generate the validity and reason for the page section summary
-            const valid = sectionOutputText.split("VALID:")[1].split("REASON:")[0].trim().lower() === "yes";
+            const valid = sectionOutputText.split("VALID:")[1].split("REASON:")[0].trim().toLowerCase() === "yes";
             const reason = sectionOutputText.split("REASON:")[1].trim();
 
             insertRows.push({
@@ -126,7 +126,7 @@ async function handler(req: Request) {
                 "section_number": i,
                 "valid": valid,
                 "reason": reason,
-                "summary_embedding": sectionEmbedding,
+                "section_embedding": sectionEmbedding,
                 "left": pageMarkdownArray[i].left,
                 "top": pageMarkdownArray[i].top,
                 "right": pageMarkdownArray[i].right,

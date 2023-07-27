@@ -11,6 +11,7 @@ import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
 // Library Imports
 import { textractOCR, uploadAWS } from '@/lib/aws';
+import { createDenialLetterSupabase } from '@/lib/supabase';
 
 export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
@@ -20,7 +21,6 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
 
     const [progressValues, setProgressValues] = useState(null);
     const [progressTitle, setProgressTitle] = useState('');
-    const [claimId, setClaimId] = useState(null);
 
     const handleNextStage = () => {
         setTransitioningState(true);
@@ -49,19 +49,19 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
             await updateAvailableClaims();
 
             // Save claimId for later and start to process the new denial letter
-            setClaimId(data[0].id);
+            const claimId = data[0].id;
 
             // Move to next stage - denial letter processing
             handleNextStage();
 
             // if both selected and uploaded denial letter, upload the uploaded one
-            if (uploadedDenialLetter) await handleDenialLetterUpload(uploadedDenialLetter);
-            else if (selectedDenialLetter) await handleSelctedDenialLetter(selectedDenialLetter);
+            if (uploadedDenialLetter) await handleDenialLetterUpload(uploadedDenialLetter, claimId);
+            else if (selectedDenialLetter) await handleSelctedDenialLetter(selectedDenialLetter, claimId);
             else console.error('No denial letter selected or uploaded');
         }
     };
 
-    const handleDenialLetterUpload = async (file) => {
+    const handleDenialLetterUpload = async (file, claimId) => {
         // Need to implement:
         // 1. Upload file to AWS using the lib function
         setProgressTitle('Processing Denial Letter on AWS');
@@ -103,20 +103,31 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         // Upload the file to AWS and Kick Off Processing
         // const { jobId, jobType, jobOutput } = await uploadAWS(file, 'letter', uploadCallback);
         // const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
-        const jobId = 'e6c9326a7866300972750ed7e323d15bf34d0ab6b551e12d68ba373f3110b537';
+        // console.log(jobId);
+        const jobId = 'af29cf7a4e0b55c02333e107da29301d9982e64bf3a33bb43315f352990b5ae5';
         uploadCallback(100);
 
         // Perform OCR on the File using Textract
         const { textBlocks, tableBlocks, kvBlocks } = await textractOCR(jobId, pollingCallback, processingCallback);
-        console.log(textBlocks);
-        console.log(tableBlocks);
-        console.log(kvBlocks);
 
-        // Upload the OCR results to Supabase
-        
+        // Parse and Summarize OCR data
+        const denialLetterId = await createDenialLetterSupabase(
+            file, 
+            claimId,
+            jobId,
+            textBlocks, 
+            tableBlocks, 
+            kvBlocks, 
+            user, 
+            supabaseClient, 
+            summaryCallback
+        );
+
+        console.log(denialLetterId);
+
     };
 
-    const handleSelctedDenialLetter = async (denialLetterId) => {
+    const handleSelctedDenialLetter = async (denialLetterId, claimId) => {
         // Need to implement:
         // 1. Retrieve all relevant info from the denial letter table 
         // 2. Create a new denial letter record with the same information and updated claim ID

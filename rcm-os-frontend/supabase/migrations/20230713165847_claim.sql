@@ -45,11 +45,56 @@ ON storage.objects for INSERT
 TO anon
 WITH CHECK ( bucket_id = 'letters' );
 
+CREATE POLICY "Enable Delete for Service Role on Denial Letters"
+ON "storage"."objects"
+AS PERMISSIVE
+FOR DELETE
+TO PUBLIC
+USING (true);
+
+CREATE POLICY "Give users access to delete their own denial letters"
+ON "storage"."objects"
+AS PERMISSIVE
+FOR DELETE
+TO PUBLIC
+USING (((bucket_id = 'Denial Letters'::text) AND ((auth.uid())::text = (storage.foldername(name))[0])));
+
+CREATE POLICY "Give users access to update their own denial letters"
+ON "storage"."objects"
+AS PERMISSIVE
+FOR UPDATE
+TO PUBLIC
+USING (((bucket_id = 'Denial Letters'::text) AND ((auth.uid())::text = (storage.foldername(name))[0])));
+
+CREATE POLICY "Give users access to create their own denial letters"
+ON "storage"."objects"
+AS PERMISSIVE
+FOR INSERT
+TO PUBLIC
+WITH CHECK (((bucket_id = 'Denial Letters'::text) AND ((auth.uid())::text = (storage.foldername(name))[0])));
+
+CREATE POLICY "Give users access to read their own denial letters"
+ON "storage"."objects"
+AS PERMISSIVE
+FOR SELECT
+TO PUBLIC
+USING (((bucket_id = 'Denial Letters'::text) AND ((auth.uid())::text = (storage.foldername(name))[0])));
+
+CREATE POLICY "Authenticated to Upload Denial Letters" 
+ON storage.objects for INSERT
+TO authenticated
+WITH CHECK ( bucket_id = 'letters' AND auth.uid() IS NOT NULL );
+
+CREATE POLICY "Authenticated to Read Denial Letters"
+ON storage.objects for SELECT
+TO authenticated
+USING ( bucket_id = 'letters' AND auth.uid() = SPLIT_PART(name, '/', 1)::uuid);
+
 -- Create table to store denial letter information
 
 CREATE TABLE "public"."denial_letters" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "claim_id" "uuid",
+    "claim_id" "uuid" NOT NULL,
     "user_id" "uuid" NOT NULL,
     "file_name" "text" NOT NULL,
     "file_url" "text" NOT NULL,
@@ -87,6 +132,12 @@ ON "public"."denial_letters"
 AS PERMISSIVE FOR INSERT
 TO anon
 WITH CHECK (true);
+
+CREATE POLICY "Enable CRUD for authenticated users only" 
+ON "public"."denial_letters" 
+TO "authenticated" 
+USING (("auth"."uid"() = "user_id")) 
+WITH CHECK (("auth"."uid"() = "user_id"));
 
 -- Increment progress function for denial letters
 CREATE FUNCTION letter_progress_increment ("increment" numeric, "letter_id" uuid) 

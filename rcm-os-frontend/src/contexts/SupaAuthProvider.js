@@ -102,7 +102,7 @@ const SupaContextProvider = (props) => {
         if (!user) return;
         try {
             const claimData = await getAvailableClaims();
-            if (claimData.length > 0) {
+            if (claimData) {
                 // claim(s) exist
                 const claims = claimData.map((claim) => {
                     return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: claim.denial_letters, medical_records: claim.medical_records };
