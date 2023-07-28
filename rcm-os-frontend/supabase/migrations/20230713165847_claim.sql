@@ -102,6 +102,10 @@ CREATE TABLE "public"."denial_letters" (
     "content_processing_progress" "numeric" NOT NULL,
     "content_processing_type" "text" NOT NULL,
     "content_processing_id" "text",
+    "text_processing_progress" "numeric" NOT NULL,
+    "table_processing_progress" "numeric" NOT NULL,
+    "kv_processing_progress" "numeric" NOT NULL,
+    "summary_processing_progress" "numeric" NOT NULL,
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL
 );
 
@@ -140,15 +144,33 @@ USING (("auth"."uid"() = "user_id"))
 WITH CHECK (("auth"."uid"() = "user_id"));
 
 -- Increment progress function for denial letters
-CREATE FUNCTION letter_progress_increment ("increment" numeric, "letter_id" uuid) 
+CREATE FUNCTION letter_progress ("progress" numeric, "letter_id" uuid, "data_type" text) 
 RETURNS void 
 LANGUAGE "plpgsql"
 AS
 $$
 BEGIN
-  UPDATE "public"."denial_letters"
-  SET "content_processing_progress" = "content_processing_progress" + "increment"
-  WHERE "id" = "letter_id";
+  IF "data_type" = 'text' THEN
+    UPDATE "public"."denial_letters"
+    SET "text_processing_progress" = "progress",
+        "content_processing_progress" = ("progress" + "table_processing_progress" + "kv_processing_progress" + "summary_processing_progress") / 4.0
+    WHERE "id" = "letter_id";
+  ELSIF "data_type" = 'table' THEN
+    UPDATE "public"."denial_letters"
+    SET "table_processing_progress" = "progress",
+        "content_processing_progress" = ("text_processing_progress" + "progress" + "kv_processing_progress" + "summary_processing_progress") / 4.0
+    WHERE "id" = "letter_id";
+  ELSIF "data_type" = 'kv' THEN
+    UPDATE "public"."denial_letters"
+    SET "kv_processing_progress" = "progress",
+        "content_processing_progress" = ("text_processing_progress" + "table_processing_progress" + "progress" + "summary_processing_progress") / 4.0
+    WHERE "id" = "letter_id";
+  ELSIF "data_type" = 'summary' THEN
+    UPDATE "public"."denial_letters"
+    SET "summary_processing_progress" = "progress",
+        "content_processing_progress" = ("text_processing_progress" + "table_processing_progress" + "kv_processing_progress" + "progress") / 4.0
+    WHERE "id" = "letter_id";
+  END IF;
 END;
 $$;
 
@@ -156,7 +178,7 @@ $$;
 
 CREATE VIEW "public"."claim_documents" AS 
     SELECT
-        'medical_record' AS "type",
+        'medical_record' AS "data_type",
         claim_id,
         id AS document_id,
         file_name,
@@ -167,7 +189,7 @@ CREATE VIEW "public"."claim_documents" AS
     FROM "public"."medical_records"
     UNION ALL
     SELECT
-        'denial_letter' AS "type",
+        'denial_letter' AS "data_type",
         claim_id,
         id AS document_id,
         file_name,

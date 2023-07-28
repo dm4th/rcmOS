@@ -41,7 +41,11 @@ export const createDenialLetterSupabase = async (
             file_url: fileUrl,
             content_processing_progress: 0,
             content_processing_type: 'Textract',
-            content_processing_id: processingId ? processingId : null
+            content_processing_id: processingId ? processingId : null,
+            text_processing_progress: 0,
+            table_processing_progress: 0,
+            kv_processing_progress: 0,
+            summary_processing_progress: 0,
         }])
         .select();
     if (insertError) {
@@ -51,10 +55,10 @@ export const createDenialLetterSupabase = async (
     const denialLetterId = insertData[0].id;
 
     // send data blocks to summarize-<datatype> edge function
-    const summaryCallbackWithSupabase = async (progressIncrement) => {
-        summaryCallback(progressIncrement);
+    const summaryCallbackWithSupabase = async (processingProgress, processType) => {
+        summaryCallback(processingProgress, processType);
         const { error: updateError } = await supabaseClient
-            .rpc('letter_progress_increment', {increment: progressIncrement, letter_id: denialLetterId});
+            .rpc('letter_progress', {progress: processingProgress, letter_id: denialLetterId, data_type: processType});
         if (updateError) {
             console.error(updateError);
         }
@@ -77,10 +81,8 @@ export const createDenialLetterSupabase = async (
 };
 
 const summarizeLetterText = async (blocks, letterId, supabaseClient, summaryCallback) => {
-    console.log('text', blocks);
 
     const totalPages = blocks[blocks.length - 1][0].Page;
-    const progressIncrement = Math.floor((1 / totalPages) * 25); // 25% of the total progress bar
     for (const pageData of blocks) {
         if (pageData.length === 0) {
             continue;
@@ -137,10 +139,13 @@ const summarizeLetterText = async (blocks, letterId, supabaseClient, summaryCall
                 }
             }
         }
-        summaryCallback(progressIncrement);
+        const progress = Math.floor((currentPage / totalPages) * 100);
+        summaryCallback(progress, "text");
     }
 };
-const summarizeLetterTables = async (blocks, recordId, supabaseClient, summaryCallback) => {};
+const summarizeLetterTables = async (blocks, recordId, supabaseClient, summaryCallback) => {
+
+};
 const summarizeLetterForms = async (blocks, recordId, supabaseClient, summaryCallback) => {};
     
 

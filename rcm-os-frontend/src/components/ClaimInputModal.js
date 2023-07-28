@@ -69,7 +69,7 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
             { text: 'Uploading File to AWS', progress: 0},
             { text: 'Performing OCR on File', progress: 0},
             { text: 'Extracting Data from OCR Job', progress: 0},
-            { text: 'Generating Denial Summary', progress: 0},
+            { text: 'Generating Denial Summary', progress: 0, textProgress: 0, tableProgress: 0, kvProgress: 0, summaryProgress: 0},
         ]);
         const uploadCallback = (progress) => {
             setProgressValues((prev) => {
@@ -92,10 +92,26 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
                 return newProgressValues;
             });
         };
-        const summaryCallback = (progressIncrement) => {
+        const summaryCallback = (progress, type) => {
             setProgressValues((prev) => {
                 const newProgressValues = [...prev];
-                newProgressValues[3].progress += progressIncrement;
+                switch (type) {
+                    case 'text':
+                        newProgressValues[3].textProgress = progress;
+                        break;
+                    case 'table':
+                        newProgressValues[3].tableProgress = progress;
+                        break;
+                    case 'kv':
+                        newProgressValues[3].kvProgress = progress;
+                        break;
+                    case 'summary':
+                        newProgressValues[3].summaryProgress = progress;
+                        break;
+                    default:
+                        break;
+                }
+                newProgressValues[3].progress = (newProgressValues[3].textProgress + newProgressValues[3].tableProgress + newProgressValues[3].kvProgress + newProgressValues[3].summaryProgress)/4;
                 return newProgressValues;
             });
         };
