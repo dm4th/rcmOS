@@ -29,20 +29,22 @@ export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber:
         `If you cannot determine a medical reason for the denial, simply respond in the following format:` +
         "VALID: <Yes/No>\n" +
         "REASON: <explanation for why you cannot determine the medical cause for the insurance claim denial>\n" +
-        "Otherwise please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
+        "Otherwise please respond in the following format and only in the following format. Do not add any extra text other than responding in this way:\n" +
         "VALID: <Yes/No>\n" +
         "REASON: <medical explanation of why the insurance claim was denied, citing specific evidence for your claim>" +
         "Please only respond with VALID = Yes if you can determine the medical cause of the denial with a high degree of confidence. If you are not confident in your answer, please respond with VALID = No."
     );
 });
 
-export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber: number, markdownTable: string, inputTemplate: InputTemplate) => {
+export const tableSummaryTemplate = ((tablePrompt: string, sectionNumber: number) => {
 
     return PromptTemplate.fromTemplate(
-        `You are a ${inputTemplate.role} helping the user achieve their goal of ${inputTemplate.goal}.\n` +
-        `Below is a description of section ${sectionNumber} of a table pulled from a ${inputTemplate.description} using machine learning. The table has the following characteristics:\n` +
+        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
+        `The primary goal of your analysis is to determine the reason why the insurance claim was denied.\n` +
+        `You are analyzing section ${sectionNumber} of a table of information pulled from an insurance claim denial letter using machine learning / OCR.\n` +
+        "Below is a description of the table you are analyzing:\n" +
         tablePrompt +
-        "\nBelow is a markdown formatted table describing the cells of data found in the described section of this table. Here are calumn descriptions for the markdown table:\n\n" +
+        "Additionally, below is a markdown formatted table describing the cells of information in the table. The table contains the following columns:\n" +
         "1. Text: The text retrieved from the cell in the table\n" +
         "2. Confidence: A percentage with 100% being very confident that the text pulled from the cell is correct. Anything below 50% should be viewed very cautiously.\n" +
         "3. Column Index: The column the cell appears in for the table.\n" +
@@ -50,17 +52,20 @@ export const tableSectionSummaryTemplate = ((tablePrompt: string, sectionNumber:
         "5. Column Span: How many columns in the table the given cell spans, starting from Column Index and going right.\n" +
         "6. Row Span: How many rows in the table the given cell spans, starting from Row Index and going down.\n" +
         "\nBelow is the data for the retrieved section of the table:\n\n" +
-        markdownTable +
-        `\n\nGiven the above information about the text and data retrieved from the table of data in ${inputTemplate.description}, what is the title of the information and a 1 to 2 paragraph summary of the table section.\n` +
-        `In your summary please be as specific as possible about what information is contained in the table and how it pertains to the goal of ${inputTemplate.goal}. Cite specific names, numbers, dates and other unique items explicitly.\n` +
-        "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
-        "TITLE: <title of table section>\n" +
-        "SUMMARY: <summary of table section>"
+        "{markdownTable}" +
+        `\n\nGiven the above information about the text and data retrieved from the table of data in the insurance claim denial letter, can you determine why the insurance claim was denied?\n` +
+        `If you cannot determine a medical reason for the denial, simply respond in the following format:` +
+        "VALID: <Yes/No>\n" +
+        "REASON: <explanation for why you cannot determine the medical cause for the insurance claim denial>\n" +
+        "Otherwise please respond in the following format and only in the following format. Do not add any extra text other than responding in this way:\n" +
+        "VALID: <Yes/No>\n" +
+        "REASON: <medical explanation of why the insurance claim was denied, citing specific evidence for your claim>" +
+        "Please only respond with VALID = Yes if you can determine the medical cause of the denial with a high degree of confidence. If you are not confident in your answer, please respond with VALID = No."
     );
 });
 
 
-export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNumber: number, markdownTable: string, inputTemplate: InputTemplate) => {
+export const kvSummaryTemplate = ((pageNumber: string | number, sectionNumber: number) => {
 
     let pageSection: string; 
     switch (sectionNumber) {
@@ -82,8 +87,9 @@ export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNu
 
 
     return PromptTemplate.fromTemplate(
-        `You are a ${inputTemplate.role} helping the user achieve their goal of ${inputTemplate.goal}.\n` +
-        `Below is a markdown formatted table of key value pairs in a form pulled from ${pageDesc} of a ${inputTemplate.description} using machine learning. The table contains the following columns:\n` +
+        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
+        `The primary goal of your analysis is to determine the reason why the insurance claim was denied.\n` +
+        `Below is a markdown formatted table of key value pairs in a form pulled from ${pageDesc} of an insurance claim denial letter using machine learning / OCR. The table contains the following columns:\n` +
         "1. Key: The key of the key value pair\n" +
         "2. Value: The value of the key value pair\n" +
         "3. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 50% should be viewed very cautiously.\n" +
@@ -92,12 +98,15 @@ export const kvSectionSummaryTemplate = ((pageNumber: string | number, sectionNu
         "6. Right: A percentage representing how far right on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
         "7. Bottom: A percentage representing how far down on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
         "\nBelow is the markdown table describing the key-value pair data on this part of the page:\n\n" +
-        markdownTable +
-        `\n\nGiven the above information about the text retrieved from the ${inputTemplate.description}, what is the title of the form section and a 1 to 2 paragraph summary of the form section.\n` +
-        `In your summary please be as specific as possible about what information is contained in the form section and how it pertains to the goal of ${inputTemplate.goal}. Cite specific names, numbers, dates and other unique items explicitly.\n` +
-        "Please respond in the following format and only in the following format. Do not add any extra text than responding in this way:\n" +
-        "TITLE: <title of form section>\n" +
-        "SUMMARY: <summary of form section>"
+        "{markdownTable}" +
+        `\n\nGiven the above information about the values retrieved from the insurance claim denial letter, can you determine why the insurance claim was denied?\n` +
+        `If you cannot determine a medical reason for the denial, simply respond in the following format:` +
+        "VALID: <Yes/No>\n" +
+        "REASON: <explanation for why you cannot determine the medical cause for the insurance claim denial>\n" +
+        "Otherwise please respond in the following format and only in the following format. Do not add any extra text other than responding in this way:\n" +
+        "VALID: <Yes/No>\n" +
+        "REASON: <medical explanation of why the insurance claim was denied, citing specific evidence for your claim>" +
+        "Please only respond with VALID = Yes if you can determine the medical cause of the denial with a high degree of confidence. If you are not confident in your answer, please respond with VALID = No."
     );
 });
 
