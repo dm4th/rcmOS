@@ -11,6 +11,40 @@ const KV_SUMMARY_CONFIDENCE_THRESHOLD = 0.8;
 
 export const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
 
+export const letterReSummaryTemplate = ((claimDenialReasons: string[], prompt: string, summary: string) => {
+
+    const claimDenialReasonsString = claimDenialReasons.join("\n");
+
+    return PromptTemplate.fromTemplate(
+        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
+        `The primary goal of your analysis is to determine the reason why the insurance claim was denied.\n` +
+        `The end user has asked you to re-summarize a letter that has already been summarized.\n` +
+        `Here is the previous summary of the letter:\n` +
+        `${summary}\n` +
+        `The user provided the following instructions for how to re-summarize the letter:\n` +
+        `${prompt}\n` +
+        `Below is a list of possible medical reasons why the insurance claim was denied, in each case prefaced with the text 'REASON:'\n` +
+        claimDenialReasonsString +
+        `\n\nGiven the above information about the possible reasons for the insurance claim denial and changes the user would like you to make, re-write the summary for why the insurance claim was denied.\n` +
+        `The text you generate will be used for future operations, so please be as succinct and direct as possible in your response. Additionally do not include the text "REASON: " in your response.` +
+        `If the user asked you to generate a longer summary, please do not do so and stick to keeping the summary to a maximum of two sentences.`
+    );
+});
+
+export const letterSummaryTemplate = ((claimDenialReasons: string[]) => {
+
+    const claimDenialReasonsString = claimDenialReasons.join("\n");
+
+    return PromptTemplate.fromTemplate(
+        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
+        `The primary goal of your analysis is to determine the reason why the insurance claim was denied.\n` +
+        `Below is a list of possible medical reasons why the insurance claim was denied, in each case prefaced with the text 'REASON:'\n` +
+        claimDenialReasonsString +
+        `\n\nGiven the above information about the possible reasons for the insurance claim denial, write a one-to-two sentance summary for why the insurance claim was denied.\n` +
+        `The text you generate will be used for future operations, so please be as succinct and direct as possible in your response. Additionally do not include the text "REASON: " in your response`
+    );
+});
+
 export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber: number) => {
 
     return PromptTemplate.fromTemplate(

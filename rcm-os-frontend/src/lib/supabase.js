@@ -17,7 +17,6 @@ export const createDenialLetterSupabase = async (
     // upload file to supabase storage
     const fileName = file.name;
     const fileUrl = `${user.id}/${fileName}`;
-    console.log(fileUrl);
     const { error: uploadError } = await supabaseClient.storage
         .from('letters')
         .upload(fileUrl, file);
@@ -67,11 +66,11 @@ export const createDenialLetterSupabase = async (
     await Promise.allSettled([
         summarizeLetterText(textBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
         summarizeLetterTables(tableBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
-        // summarizeLetterForms(kvBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        summarizeLetterForms(kvBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
     ]).then((results) => {
         const textResponse = results[0];
         const tableResponse = results[1];
-        // const kvResponse = results[2];
+        const kvResponse = results[2];
 
         if (textResponse.status === 'fulfilled') {
             summaryCallbackWithSupabase(100, 'text');
@@ -81,13 +80,22 @@ export const createDenialLetterSupabase = async (
             summaryCallbackWithSupabase(100, 'table');
         }
 
-        // if (kvResponse.status === 'fulfilled') {
-        //     summaryCallbackWithSupabase(100, 'kv');
-        // }
+        if (kvResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'kv');
+        }
     });
 
     // summarize denial letter
+    const summaryBody = {
+        letterId: denialLetterId
+    };
+    const denialLetterSummaryData = await supabaseClient.functions.invoke('summarize-letter', {
+        body: JSON.stringify(summaryBody),
+    });
+    summaryCallbackWithSupabase(100, 'summary');
 
+    // Return the denial letter ID
+    return { denialLetterId, denialLetterSummary: denialLetterSummaryData.data.summary };
 };
 
 const summarizeLetterText = async (blocks, letterId, supabaseClient, summaryCallback) => {

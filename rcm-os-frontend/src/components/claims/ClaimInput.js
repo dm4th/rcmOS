@@ -103,11 +103,11 @@ export function ClaimInput({ handleSubmit }) {
             </div>
             )}
             {denialLetters.length > 0 && (
-                <>
+                <div className='flex flex-row justify-between m-1'>
                     <div className="border-b border-gray-400 dark:border-gray-600 w-1/3 self-center"></div>
-                    <p className="text-gray-400 dark:text-gray-600 text-xs italic w-1/3 self-center">or</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-xs italic">OR</p>
                     <div className="border-b border-gray-400 dark:border-gray-600 w-1/3 self-center"></div>
-                </>
+                </div>
             )}
             <div className='flex flex-col justify-between m-1 py-2'>
                 <div className="flex flex-col items-center justify-center">

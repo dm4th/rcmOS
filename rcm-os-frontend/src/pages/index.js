@@ -15,40 +15,13 @@ export default function Home() {
     const { user, isLoading } = useSupaUser();
 
     const [inputModalOpen, setInputModalOpen] = useState(false);
-    const [inputModalState, setInputModalState] = useState('claim'); // claim, denialProcessing, medical, policy, data
 
     useEffect(() => {
         setInputModalOpen(false);
-        setInputModalState('claim');
     }, [user]); 
 
     const toggleInputModal = () => {
         setInputModalOpen(!inputModalOpen);
-        setInputModalState('claim');
-    };
-
-    const handleInputModalNextState = () => {
-        switch (inputModalState) {
-            case 'claim':
-                setInputModalState('denialProcessing');
-                break;
-            case 'denialProcessing':
-                setInputModalState('medical');
-                break;
-            case 'medical':
-                setInputModalState('policy');
-                break;
-            case 'policy':
-                setInputModalState('data');
-                break;
-            case 'data':
-                setInputModalState('claim');
-                toggleInputModal();
-                break;
-            default:
-                setInputModalState('claim');
-                break;
-        }
     };
 
     return (
@@ -80,7 +53,7 @@ export default function Home() {
                     classNames="fade"
                     unmountOnExit={true}
                 >
-                    <ClaimInputModal onClose={toggleInputModal} modalStage={inputModalState} onHandleNextStage={handleInputModalNextState} />
+                    <ClaimInputModal onClose={toggleInputModal} />
                 </CSSTransition>
             }
         </div>

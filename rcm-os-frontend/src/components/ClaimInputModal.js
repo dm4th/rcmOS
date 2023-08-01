@@ -1,10 +1,11 @@
 // React imports
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, use } from 'react';
 
 // Component Imports
 import { CSSTransition } from 'react-transition-group';
 import { ClaimInput } from '@/components/claims/ClaimInput';
 import { ClaimProcessing } from '@/components/claims/ClaimProcessing';
+import { DenialSummary } from '@/components/claims/DenialSummary';
 
 // Context Imports
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
@@ -13,38 +14,54 @@ import { useSupaUser } from '@/contexts/SupaAuthProvider';
 import { textractOCR, uploadAWS } from '@/lib/aws';
 import { createDenialLetterSupabase } from '@/lib/supabase';
 
-export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
+export function ClaimInputModal({ onClose }) {
 
     const { user, updateAvailableClaims, supabaseClient } = useSupaUser();
 
+    const [modalStage, setModalStage] = useState('claim'); // claim, denialProcessing, denialSummary
     const [transitioningState, setTransitioningState] = useState(false);
 
     const [progressValues, setProgressValues] = useState(null);
     const [progressTitle, setProgressTitle] = useState('');
 
+    const [denialLetterId, setDenialLetterId] = useState(null);
+    const [denialLetterSummary, setDenialLetterSummary] = useState('');
+
     const handleNextStage = () => {
         setTransitioningState(true);
         setTimeout(() => {
-            onHandleNextStage();
+            setModalStage((prevModalStage) => {
+                console.log(`Moving from stage: ${prevModalStage}`);
+                switch (prevModalStage) {
+                    case 'claim':
+                        return 'denialProcessing';
+                    case 'denialProcessing':
+                        return 'denialSummary'
+                    default:
+                        return 'claim'
+                }
+            });
             setTransitioningState(false);
         }, 300);
     };
 
     const handleNewClaim = async (title, selectedDenialLetter, uploadedDenialLetter) => {
         // Create New Claim
-        const { data, error } = await supabaseClient
-            .from('claims')
-            .insert([
-                {
-                    title: title,
-                    status: 'uploading',
-                    user_id: user.id,
-                },
-            ])
-            .select();
-        if (error) {
-            console.log(error);
-        } else {
+        try {
+            const { data, error } = await supabaseClient
+                .from('claims')
+                .insert([
+                    {
+                        title: title,
+                        status: 'uploading',
+                        user_id: user.id,
+                    },
+                ])
+                .select();
+            if (error) {
+                throw error;
+            } 
+
             // Update available claims
             await updateAvailableClaims();
 
@@ -58,8 +75,40 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
             if (uploadedDenialLetter) await handleDenialLetterUpload(uploadedDenialLetter, claimId);
             else if (selectedDenialLetter) await handleSelctedDenialLetter(selectedDenialLetter, claimId);
             else console.error('No denial letter selected or uploaded');
+
+            // Update claim status to processing and refresh available claims
+            const { error: processingUpdateError } = await supabaseClient
+                .from('claims')
+                .update({ status: 'processing' })
+                .match({'id': claimId})
+            if (processingUpdateError) {
+                throw processingUpdateError;
+            }
+            await updateAvailableClaims();
+
+            // Move to next stage - denial letter summary
+            handleNextStage();
+        } catch (error) {
+            console.error(error);
         }
     };
+
+    const handleSummarySubmit = async (summary) => {
+        // Check if the input summary == denialLetterSummary
+        // If they match, nust move to the next stage
+        // else update the database and move to the next stage
+        if (summary !== denialLetterSummary) {
+            // Update the database
+            const { error } = await supabaseClient
+                .from('denial_letters')
+                .update({ summary: summary })
+                .match({'id': denialLetterId})
+            if (error) {
+                console.error(error);
+            }
+        }
+        handleNextStage();
+    }
 
     const handleDenialLetterUpload = async (file, claimId) => {
         // Need to implement:
@@ -127,7 +176,7 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
         const { textBlocks, tableBlocks, kvBlocks } = await textractOCR(jobId, pollingCallback, processingCallback);
 
         // Parse and Summarize OCR data
-        const denialLetterId = await createDenialLetterSupabase(
+        const { denialLetterId, denialLetterSummary } = await createDenialLetterSupabase(
             file, 
             claimId,
             jobId,
@@ -139,8 +188,8 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
             summaryCallback
         );
 
-        console.log(denialLetterId);
-
+        setDenialLetterId(denialLetterId);
+        setDenialLetterSummary(denialLetterSummary);
     };
 
     const handleSelctedDenialLetter = async (denialLetterId, claimId) => {
@@ -176,6 +225,14 @@ export function ClaimInputModal({ onClose, modalStage, onHandleNextStage }) {
                     unmountOnExit={true}
                 >
                     <ClaimProcessing progressTitle={progressTitle} progressValues={progressValues} />
+                </CSSTransition>
+                <CSSTransition
+                    in={modalStage === 'denialSummary' && !transitioningState}
+                    timeout={300}
+                    classNames="fade"
+                    unmountOnExit={true}
+                >
+                    <DenialSummary summary={denialLetterSummary} letterId={denialLetterId} handleSubmit={handleSummarySubmit}  />
                 </CSSTransition>
             </div>
         </div>

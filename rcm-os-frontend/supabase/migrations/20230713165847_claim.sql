@@ -131,6 +131,12 @@ AS PERMISSIVE FOR SELECT
 TO anon
 USING (true);
 
+CREATE POLICY "Enable update access for anon" 
+ON "public"."denial_letters"
+AS PERMISSIVE FOR UPDATE
+TO anon
+USING (true);
+
 CREATE POLICY "Enable insert access for anon" 
 ON "public"."denial_letters"
 AS PERMISSIVE FOR INSERT
