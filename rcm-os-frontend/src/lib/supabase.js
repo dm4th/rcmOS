@@ -34,7 +34,6 @@ export const createDenialLetterSupabase = async (
     const { data: insertData, error: insertError } = await supabaseClient
         .from('denial_letters')
         .insert([{
-            claim_id: claimId,
             user_id: user.id,
             file_name: fileName,
             file_url: fileUrl,
@@ -52,6 +51,20 @@ export const createDenialLetterSupabase = async (
         return;
     }
     const denialLetterId = insertData[0].id;
+
+    // create new linking record in claim_documents table
+    const { error: claimDocError } = await supabaseClient
+        .from('claim_documents')
+        .insert([{
+            claim_id: claimId,
+            document_id: denialLetterId,
+            document_type: 'denial_letter',
+            user_id: user.id,
+        }]);
+    if (claimDocError) {
+        console.error(claimDocError);
+        return;
+    };
 
     // send data blocks to summarize-<datatype> edge function
     const summaryCallbackWithSupabase = async (processingProgress, processType) => {

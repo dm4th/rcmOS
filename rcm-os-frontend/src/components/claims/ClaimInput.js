@@ -14,6 +14,7 @@ export function ClaimInput({ handleSubmit }) {
     const [selectedDenialLetter, setSelectedDenialLetter] = useState(null);
     const [uploadedDenialLetter, setUploadedDenialLetter] = useState(null);
     const [uploadedFileName, setUploadedFileName] = useState(null);
+    const [submitError, setSubmitError] = useState('');
 
     // Handle input change
     const handleTitleChange = (e) => {
@@ -24,7 +25,10 @@ export function ClaimInput({ handleSubmit }) {
     const handleCreateClaim = () => {
         if (claim.length < 1) {
             setTitleError('Please enter a title for your claim');
-        } else if (titleError.length === 0) {
+        } else if (!selectedDenialLetter && !uploadedDenialLetter) {
+            setSubmitError('Please select a denial letter or upload a new one');
+        }
+        else if (titleError.length === 0) {
             handleSubmit(claim, selectedDenialLetter, uploadedDenialLetter);
         }
     };
@@ -44,6 +48,7 @@ export function ClaimInput({ handleSubmit }) {
     };
 
     useEffect(() => {
+        console.log('Initial Use Effect')
         const fetchDenialLetters = async () => {
             const { data, error } = await supabaseClient
                 .from('denial_letters')
@@ -67,6 +72,7 @@ export function ClaimInput({ handleSubmit }) {
     useEffect(() => {
         if (uploadedDenialLetter) {
             setSelectedDenialLetter(null);
+            setSubmitError('');
         }
     }, [uploadedDenialLetter]);
 
@@ -74,6 +80,7 @@ export function ClaimInput({ handleSubmit }) {
         if (selectedDenialLetter) {
             setUploadedDenialLetter(null);
             setUploadedFileName(null);
+            setSubmitError('');
         }
     }, [selectedDenialLetter]);
 
@@ -96,8 +103,9 @@ export function ClaimInput({ handleSubmit }) {
                     Select Pre-Processed Denial Letter
                 </label>
                 <select className="shadow appearance-none border rounded w-full py-2 px-3 mb-1 text-gray-900 leading-tight focus:ring-2 focus:shadow-outline" id="file-list" value={selectedDenialLetter} onChange={(e) => setSelectedDenialLetter(e.target.value)}>
+                    <option className='text-gray-700' value={null}>...</option>
                     {denialLetters.map((file) => (
-                        <option key={file.id} value={file.id}>{file.name}</option>
+                        <option key={file.id} value={file.id}>{file.file_name}</option>
                     ))}
                 </select>
             </div>
@@ -125,9 +133,10 @@ export function ClaimInput({ handleSubmit }) {
                     {uploadedFileName && (<p className="text-gray-600 dark:text-gray-400 text-xs italic ml-2">{uploadedFileName}</p>)}
                 </div>
             </div>
-            <button className="mt-2 bg-blue-500 hover:bg-blue-200 dark:hover:bg-blue-800 text-gray-900 dark:text-gray-100 font-bold py-2 px-4 rounded" onClick={handleCreateClaim}>
+            <button className="my-2 bg-blue-500 hover:bg-blue-200 dark:hover:bg-blue-800 text-gray-900 dark:text-gray-100 font-bold py-2 px-4 rounded" onClick={handleCreateClaim}>
                 Create Claim Appeal
             </button>
+            {submitError.length > 0 && <p className="text-red-500 text-xs italic">{submitError}</p>}
         </div>
     );
 };

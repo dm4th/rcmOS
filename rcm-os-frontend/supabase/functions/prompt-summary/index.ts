@@ -83,19 +83,17 @@ async function handler(req: Request) {
                     await writer.write(encoder.encode(`data: ${JSON.stringify({ start: true })}\n\n`));
                 },
                 handleLLMNewToken: async (token) => {
-                    console.log(`Token: ${token}`);
                     await writer.ready;
                     await writer.write(encoder.encode(`data: ${JSON.stringify({ token })}\n\n`));
                 },
                 handleLLMEnd: async (output) => {
-                    console.log(`Output:\n${output}`);
                     await writer.ready;
                     await writer.close();
                     const summaryText = output.generations[0][0].text;
                     const { error: letterUpdateError } = await supabaseClient
-                    .from('denial_letters')
-                    .update({ summary: summaryText })
-                    .match({'id': letterId})
+                        .from('claim_documents')
+                        .update({ summary: summaryText })
+                        .match({'document_id': letterId, 'document_type': 'denial_letter'});
                     if (letterUpdateError) {
                     throw new Error(letterUpdateError.message);
                     }

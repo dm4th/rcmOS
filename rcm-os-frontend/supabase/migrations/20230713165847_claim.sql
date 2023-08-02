@@ -1,36 +1,3 @@
--- Create Table to store claim information
-
-CREATE TABLE "public"."claims" (
-    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "user_id" "uuid" NOT NULL,
-    "title" "text" NOT NULL,
-    "status" "text" NOT NULL,
-    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
-    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
-);
-
-ALTER TABLE "public"."claims" OWNER TO "postgres";
-
-ALTER TABLE ONLY "public"."claims"
-    ADD CONSTRAINT "claims_pkey" PRIMARY KEY ("id");
-
-ALTER TABLE ONLY "public"."claims"
-    ADD CONSTRAINT "claims_user_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id");
-
-ALTER TABLE "public"."claims" ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Enable CRUD for authenticated users only" ON "public"."claims" TO "authenticated" USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
-
-GRANT ALL ON TABLE "public"."claims" TO "anon";
-GRANT ALL ON TABLE "public"."claims" TO "authenticated";
-GRANT ALL ON TABLE "public"."claims" TO "service_role";
-
--- Change records table to include id of the claim used to create the page summaries
-
-ALTER TABLE "public"."medical_records" ADD COLUMN "claim_id" "uuid";
-
-ALTER TABLE "public"."medical_records" ADD CONSTRAINT "medical_records_claim_fkey" FOREIGN KEY ("claim_id") REFERENCES "public"."claims"("id");
-
 -- Create PDF storage bucket for denial letters
 INSERT INTO storage.buckets (id, name)
 VALUES ('letters', 'Denial Letters');
@@ -94,7 +61,6 @@ USING ( bucket_id = 'letters' AND auth.uid() = SPLIT_PART(name, '/', 1)::uuid);
 
 CREATE TABLE "public"."denial_letters" (
     "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
-    "claim_id" "uuid" NOT NULL,
     "user_id" "uuid" NOT NULL,
     "file_name" "text" NOT NULL,
     "file_url" "text" NOT NULL,
@@ -115,7 +81,7 @@ ALTER TABLE ONLY "public"."denial_letters"
     ADD CONSTRAINT "denial_letters_pkey" PRIMARY KEY ("id");
 
 ALTER TABLE ONLY "public"."denial_letters"
-    ADD CONSTRAINT "claims_user_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id");
+    ADD CONSTRAINT "denial_letters_user_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id");
 
 ALTER TABLE "public"."denial_letters" ENABLE ROW LEVEL SECURITY;
 
@@ -180,31 +146,6 @@ BEGIN
 END;
 $$;
 
--- Create view to get a combination of medical_record and denial_letter information in one query
-
-CREATE VIEW "public"."claim_documents" AS 
-    SELECT
-        'medical_record' AS "data_type",
-        claim_id,
-        id AS document_id,
-        file_name,
-        file_url,
-        content_embedding_progress AS content_processing_progress,
-        NULL AS summary,
-        created_at
-    FROM "public"."medical_records"
-    UNION ALL
-    SELECT
-        'denial_letter' AS "data_type",
-        claim_id,
-        id AS document_id,
-        file_name,
-        file_url,
-        content_processing_progress,
-        summary,
-        created_at
-    FROM "public"."denial_letters";
-
 -- Create table to store denial letter section information
 
 CREATE TABLE "public"."letter_sections" (
@@ -251,3 +192,122 @@ ON "public"."letter_sections"
 AS PERMISSIVE FOR INSERT
 TO anon
 WITH CHECK (true);
+
+-- Create Table to store claim information
+
+CREATE TABLE "public"."claims" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "user_id" "uuid" NOT NULL,
+    "title" "text" NOT NULL,
+    "status" "text" NOT NULL,
+    "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
+    "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL
+);
+
+ALTER TABLE "public"."claims" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."claims"
+    ADD CONSTRAINT "claims_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE ONLY "public"."claims"
+    ADD CONSTRAINT "claims_user_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id");
+
+ALTER TABLE "public"."claims" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable CRUD for authenticated users only" ON "public"."claims" TO "authenticated" USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
+
+CREATE POLICY "Enable read access for anon" 
+ON "public"."claims"
+AS PERMISSIVE FOR SELECT
+TO anon
+USING (true);
+
+CREATE POLICY "Enable update access for anon" 
+ON "public"."claims"
+AS PERMISSIVE FOR UPDATE
+TO anon
+USING (true);
+
+CREATE POLICY "Enable insert access for anon" 
+ON "public"."claims"
+AS PERMISSIVE FOR INSERT
+TO anon
+WITH CHECK (true);
+
+GRANT ALL ON TABLE "public"."claims" TO "anon";
+GRANT ALL ON TABLE "public"."claims" TO "authenticated";
+GRANT ALL ON TABLE "public"."claims" TO "service_role";
+
+-- Create table to store claim <--> document relationships
+
+CREATE TABLE "public"."claim_documents" (
+    "user_id" "uuid" NOT NULL,
+    "claim_id" "uuid" NOT NULL,
+    "document_id" "uuid" NOT NULL,
+    "document_type" "text" NOT NULL,
+    "summary" "text"
+);
+
+ALTER TABLE "public"."claim_documents" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."claim_documents"
+    ADD CONSTRAINT "claim_documents_user_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."profiles"("id");
+
+ALTER TABLE ONLY "public"."claim_documents"
+    ADD CONSTRAINT "claim_documents_claim_fkey" FOREIGN KEY ("claim_id") REFERENCES "public"."claims"("id");
+
+ALTER TABLE "public"."claim_documents" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable CRUD for authenticated users only" ON "public"."claim_documents" TO "authenticated" USING (("auth"."uid"() = "user_id")) WITH CHECK (("auth"."uid"() = "user_id"));
+
+CREATE POLICY "Enable ALL for service-role only" 
+ON "public"."claim_documents" 
+TO "service_role" 
+USING (true) 
+WITH CHECK (true);
+
+CREATE POLICY "Enable read access for anon" 
+ON "public"."claim_documents"
+AS PERMISSIVE FOR SELECT
+TO anon
+USING (true);
+
+CREATE POLICY "Enable update access for anon" 
+ON "public"."claim_documents"
+AS PERMISSIVE FOR UPDATE
+TO anon
+USING (true);
+
+GRANT ALL ON TABLE "public"."claim_documents" TO "anon";
+GRANT ALL ON TABLE "public"."claim_documents" TO "authenticated";
+GRANT ALL ON TABLE "public"."claim_documents" TO "service_role";
+
+-- Create a view to more easily query claim document information
+
+CREATE VIEW "public"."claim_document_view" AS (
+    SELECT
+        claim_documents.user_id,
+        claim_documents.claim_id,
+        claim_documents.document_id,
+        claim_documents.document_type,
+        denial_letters.file_name,
+        denial_letters.file_url,
+        denial_letters.content_processing_progress,
+        COALESCE(claim_documents.summary, denial_letters.summary) AS summary
+    FROM claim_documents
+    JOIN denial_letters ON claim_documents.document_id = denial_letters.id
+    WHERE claim_documents.document_type = 'denial_letter'
+    UNION
+    SELECT
+        claim_documents.user_id,
+        claim_documents.claim_id,
+        claim_documents.document_id,
+        claim_documents.document_type,
+        medical_records.file_name,
+        medical_records.file_url,
+        medical_records.content_embedding_progress AS content_processing_progress,
+        claim_documents.summary
+    FROM claim_documents
+    JOIN medical_records ON claim_documents.document_id = medical_records.id
+    WHERE claim_documents.document_type = 'medical_record'
+);

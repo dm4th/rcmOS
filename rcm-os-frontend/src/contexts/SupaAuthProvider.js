@@ -39,17 +39,18 @@ const SupaContextProvider = (props) => {
         if (claimsData.length > 0) {
             const claims = await Promise.all(claimsData.map(async (claim) => {
                 const { data: documentData, error: documentError } = await supabase
-                    .from('claim_documents')
+                    .from('claim_document_view')
                     .select('*')
                     .eq('claim_id', claim.id);
                 if (documentError) throw documentError;
-                if (documentData.length === 0) return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: [], medical_records: [] };
+                if (documentData.length === 0) return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: [], medical_records: [], other_documents: [] };
                 const documents = documentData.map((doc) => {
-                    return { file_name: doc.file_name, id: doc.document_id, progress: doc.content_processing_progress, url: doc.file_url, type: doc.type, summary: doc.summary };
+                    return { file_name: doc.file_name, id: doc.document_id, progress: doc.content_processing_progress, url: doc.file_url, type: doc.document_type, summary: doc.summary };
                 });
                 const denialLetters = documents.filter((doc) => doc.type === 'denial_letter');
                 const medicalRecords = documents.filter((doc) => doc.type === 'medical_record');
-                return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: denialLetters, medical_records: medicalRecords };
+                const otherDocuments = documents.filter((doc) => doc.type !== 'denial_letter' && doc.type !== 'medical_record');
+                return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: denialLetters, medical_records: medicalRecords, other_documents: otherDocuments };
             }));
             return claims;
         }

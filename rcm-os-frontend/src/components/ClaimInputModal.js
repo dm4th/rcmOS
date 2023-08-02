@@ -24,6 +24,8 @@ export function ClaimInputModal({ onClose }) {
     const [progressValues, setProgressValues] = useState(null);
     const [progressTitle, setProgressTitle] = useState('');
 
+    const [claimIdState, setClaimIdState] = useState(null);
+
     const [denialLetterId, setDenialLetterId] = useState(null);
     const [denialLetterSummary, setDenialLetterSummary] = useState('');
 
@@ -94,20 +96,14 @@ export function ClaimInputModal({ onClose }) {
     };
 
     const handleSummarySubmit = async (summary) => {
-        // Check if the input summary == denialLetterSummary
-        // If they match, nust move to the next stage
-        // else update the database and move to the next stage
-        if (summary !== denialLetterSummary) {
-            // Update the database
-            const { error } = await supabaseClient
-                .from('denial_letters')
-                .update({ summary: summary })
-                .match({'id': denialLetterId})
-            if (error) {
-                console.error(error);
-            }
+        const { error } = await supabaseClient
+            .from('claim_documents')
+            .update({ summary: summary })
+            .match({'claim_id': claimIdState, 'document_id': denialLetterId, 'document_type': 'denial_letter'})
+        if (error) {
+            console.error(error);
         }
-        handleNextStage();
+        onClose();
     }
 
     const handleDenialLetterUpload = async (file, claimId) => {
@@ -190,13 +186,59 @@ export function ClaimInputModal({ onClose }) {
 
         setDenialLetterId(denialLetterId);
         setDenialLetterSummary(denialLetterSummary);
+        setClaimIdState(claimId);
     };
 
     const handleSelctedDenialLetter = async (denialLetterId, claimId) => {
         // Need to implement:
-        // 1. Retrieve all relevant info from the denial letter table 
-        // 2. Create a new denial letter record with the same information and updated claim ID
-        // 3. Return the new ID and change the state
+        setProgressTitle('Retrieving Denial Letter Information');
+        setProgressValues([
+            { text: 'Duplicating Record', progress: 0},
+            { text: 'Retrieve Denial Summary', progress: 0},
+        ]);
+        const duplicationCallback = (progress) => {
+            setProgressValues((prev) => {
+                const newProgressValues = [...prev];
+                newProgressValues[0].progress = progress;
+                return newProgressValues;
+            });
+        };
+        const retrievalCallback = (progress) => {
+            setProgressValues((prev) => {
+                const newProgressValues = [...prev];
+                newProgressValues[1].progress = progress;
+                return newProgressValues;
+            });
+        };
+        // 1. Create a new claim documents record to link the new claim with the old denial letter
+        const { data: duplicationData, error: duplicationError } = await supabaseClient
+            .from('claim_documents')
+            .insert([
+                {
+                    claim_id: claimId,
+                    document_id: denialLetterId,
+                    document_type: 'denial_letter',
+                    user_id: user.id,
+                },
+            ])
+            .select();
+        if (duplicationError) {
+            console.error(duplicationError);
+        }
+        duplicationCallback(100);
+        // 3. Retrieve the old denial letter summary
+        const denialId = duplicationData[0].document_id;
+        const { data: denialData, error: denialError } = await supabaseClient
+            .from('denial_letters')
+            .select('summary')
+            .eq('id', denialId);
+        if (denialError) {
+            console.error(denialError);
+        }
+        retrievalCallback(100);
+        setDenialLetterId(denialId);
+        setDenialLetterSummary(denialData[0].summary);
+        setClaimIdState(claimId);
     };
 
 
