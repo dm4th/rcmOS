@@ -163,9 +163,9 @@ export function ClaimInputModal({ onClose }) {
 
         // Upload the file to AWS and Kick Off Processing
         // const { jobId, jobType, jobOutput } = await uploadAWS(file, 'letter', uploadCallback);
-        // const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
+        const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
         // console.log(jobId);
-        const jobId = 'af29cf7a4e0b55c02333e107da29301d9982e64bf3a33bb43315f352990b5ae5';
+        // const jobId = 'af29cf7a4e0b55c02333e107da29301d9982e64bf3a33bb43315f352990b5ae5';
         uploadCallback(100);
 
         // Perform OCR on the File using Textract
