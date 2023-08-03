@@ -18,6 +18,8 @@ const SupaContextProvider = (props) => {
     const user = useUser();
     const accessToken = session?.access_token ?? null;
     const [isLoadingData, setIsloadingData] = useState(false);
+    const [availableClaims, setAvailableClaims] = useState([]);
+    const [claim, setClaim] = useState(null);
     const [availableDocuments, setAvailableDocuments] = useState([]);
     const [doc, setDoc] = useState(null);
     const [file, setFile] = useState(null);
@@ -26,6 +28,34 @@ const SupaContextProvider = (props) => {
     const [chat, setChat] = useState(null);
     const [showLoginModal, setShowLoginModal] = useState(false);
 
+    const getAvailableClaims = async () => {
+        if (!user) return;
+        const { data: claimsData, error: claimsError } = await supabase
+            .from('claims')
+            .select('id, title, status, created_at, updated_at')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+        if (claimsError) throw claimsError;
+        if (claimsData.length > 0) {
+            const claims = await Promise.all(claimsData.map(async (claim) => {
+                const { data: documentData, error: documentError } = await supabase
+                    .from('claim_document_view')
+                    .select('*')
+                    .eq('claim_id', claim.id);
+                if (documentError) throw documentError;
+                if (documentData.length === 0) return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: [], medical_records: [], other_documents: [] };
+                const documents = documentData.map((doc) => {
+                    return { file_name: doc.file_name, id: doc.document_id, progress: doc.content_processing_progress, url: doc.file_url, type: doc.document_type, summary: doc.summary };
+                });
+                const denialLetters = documents.filter((doc) => doc.type === 'denial_letter');
+                const medicalRecords = documents.filter((doc) => doc.type === 'medical_record');
+                const otherDocuments = documents.filter((doc) => doc.type !== 'denial_letter' && doc.type !== 'medical_record');
+                return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: denialLetters, medical_records: medicalRecords, other_documents: otherDocuments };
+            }));
+            return claims;
+        }
+    }
+    
     const getAvailableDocs = () => 
         supabase
             .from('medical_records')
@@ -69,6 +99,28 @@ const SupaContextProvider = (props) => {
             .update({ title: newName })
             .eq('id', chatId);
 
+    const updateAvailableClaims = async () => {
+        if (!user) return;
+        try {
+            const claimData = await getAvailableClaims();
+            if (claimData) {
+                // claim(s) exist
+                const claims = claimData.map((claim) => {
+                    return { title: claim.title, id: claim.id, status: claim.status, created_at: claim.created_at, updated_at: claim.updated_at, denial_letters: claim.denial_letters, medical_records: claim.medical_records };
+                });
+                setAvailableClaims(claims);
+                return claims;
+            }
+            else {
+                // no claims exist
+                setAvailableClaims([]);
+                return null;
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     const updateAvailableDocuments = async () => {
         if (!user) return;
         try {
@@ -107,12 +159,10 @@ const SupaContextProvider = (props) => {
             if (!newDoc) return;
         }
         setDoc(newDoc);
-        console.log(newDoc);
 
         if (newDoc.template_id) {
             const { data: templateData, error: templateError } = await getInputTemplate(newDoc.template_id);
             if (templateError) throw templateError;
-            console.log(templateData[0]);
             setInputTemplate(templateData[0]);
         }
 
@@ -211,20 +261,11 @@ const SupaContextProvider = (props) => {
         if (user && !isLoadingData) {
             // Login - get user details and chat history
             setIsloadingData(true);
-            Promise.allSettled([updateAvailableDocuments()]).then((results) => {
-                const availableDocsPromise = results[0];
-                if (availableDocsPromise.status === 'fulfilled') {
-                    if (availableDocsPromise.value) {
-                        setDoc(availableDocsPromise.value[0]);
-                    }
-                }
-            });
-            Promise.allSettled([updateAvailableChats()]).then((results) => {
-                const availableChatsPromise = results[0];
-                if (availableChatsPromise.status === 'fulfilled') {
-                    if (availableChatsPromise.value) {
-                        setChat(availableChatsPromise.value[0]);
-                    }
+            setClaim(null);
+            Promise.allSettled([updateAvailableClaims()]).then((results) => {
+                const availableClaimsPromise = results[0];
+                if (availableClaimsPromise.status !== 'fulfilled') {
+                    console.error(availableClaimsPromise.reason);
                 }
             });
             setIsloadingData(false);
@@ -245,7 +286,6 @@ const SupaContextProvider = (props) => {
                 let template = null;
                 if (doc.template_id) {
                     template = await getInputTemplate(doc.template_id);
-                    console.log(template.data[0]);
                 }
     
                 if (chats) {
@@ -270,13 +310,13 @@ const SupaContextProvider = (props) => {
             setAvailableChats([]);
             setChat(null);
         }
-    }, [doc]);
-    
+    }, [doc]);    
 
     const value = {
         accessToken,
         user,
         isLoading: isLoadingUser || isLoadingData,
+        availableClaims,
         availableDocuments,
         doc,
         file,
@@ -284,6 +324,7 @@ const SupaContextProvider = (props) => {
         availableChats,
         chat,
         showLoginModal,
+        updateAvailableClaims,
         updateAvailableDocuments,
         changeDoc,
         writeDocTitle,

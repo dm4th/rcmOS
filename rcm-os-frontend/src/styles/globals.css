@@ -85,4 +85,7 @@ body {
     transition: transform 300ms;
 }
 
+.claim-table-row:nth-child(even) {background: #f3f3f3}
+.claim-table-row:nth-child(odd) {background: #e2e2e2}
+
   

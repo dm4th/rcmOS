@@ -1,3 +1,303 @@
+export const createDenialLetterSupabase = async (
+    file, 
+    claimId,
+    processingId,
+    textBlocks, 
+    tableBlocks, 
+    kvBlocks, 
+    user, 
+    supabaseClient, 
+    summaryCallback
+) => {
+    // start by uploading the file to supabase storage
+    // then create a new record in the denial_letters table
+    // then send the data blocks to the summarize-<datatype> edge function
+    // and finally use the summarize-letter edge function to summarize what the denial reason is
+
+    // upload file to supabase storage
+    const fileName = file.name;
+    const fileUrl = `${user.id}/${fileName}`;
+    const { error: uploadError } = await supabaseClient.storage
+        .from('letters')
+        .upload(fileUrl, file);
+    if (uploadError) {
+        if (uploadError.statusCode === '409') {
+            console.log('File already exists in storage');
+        }
+        else {
+            console.error(uploadError);
+            return;
+        }
+    }
+
+    // create new record in denial_letters table
+    const { data: insertData, error: insertError } = await supabaseClient
+        .from('denial_letters')
+        .insert([{
+            user_id: user.id,
+            file_name: fileName,
+            file_url: fileUrl,
+            content_processing_progress: 0,
+            content_processing_type: 'Textract',
+            content_processing_id: processingId ? processingId : null,
+            text_processing_progress: 0,
+            table_processing_progress: 0,
+            kv_processing_progress: 0,
+            summary_processing_progress: 0,
+        }])
+        .select();
+    if (insertError) {
+        console.error(insertError);
+        return;
+    }
+    const denialLetterId = insertData[0].id;
+
+    // create new linking record in claim_documents table
+    const { error: claimDocError } = await supabaseClient
+        .from('claim_documents')
+        .insert([{
+            claim_id: claimId,
+            document_id: denialLetterId,
+            document_type: 'denial_letter',
+            user_id: user.id,
+        }]);
+    if (claimDocError) {
+        console.error(claimDocError);
+        return;
+    };
+
+    // send data blocks to summarize-<datatype> edge function
+    const summaryCallbackWithSupabase = async (processingProgress, processType) => {
+        summaryCallback(processingProgress, processType);
+        const { error: updateError } = await supabaseClient
+            .rpc('letter_progress', {progress: processingProgress, letter_id: denialLetterId, data_type: processType});
+        if (updateError) {
+            console.error(updateError);
+        }
+    };
+
+    await Promise.allSettled([
+        summarizeLetterText(textBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        summarizeLetterTables(tableBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+        summarizeLetterForms(kvBlocks, denialLetterId, supabaseClient, summaryCallbackWithSupabase),
+    ]).then((results) => {
+        const textResponse = results[0];
+        const tableResponse = results[1];
+        const kvResponse = results[2];
+
+        if (textResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'text');
+        }
+
+        if (tableResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'table');
+        }
+
+        if (kvResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'kv');
+        }
+    });
+
+    // summarize denial letter
+    const summaryBody = {
+        letterId: denialLetterId
+    };
+    const denialLetterSummaryData = await supabaseClient.functions.invoke('summarize-letter', {
+        body: JSON.stringify(summaryBody),
+    });
+    summaryCallbackWithSupabase(100, 'summary');
+
+    // Return the denial letter ID
+    return { denialLetterId, denialLetterSummary: denialLetterSummaryData.data.summary };
+};
+
+const summarizeLetterText = async (blocks, letterId, supabaseClient, summaryCallback) => {
+
+    const totalPages = blocks[blocks.length - 1][0].Page;
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].Page;
+        console.log(`Summarizing Letter Text page ${currentPage}`);
+
+        const preProcessedPageData = pageData.map((block) => {
+            if (block.BlockType === 'PAGE') {
+                return {
+                    blockType: block.BlockType,
+                    page: block.Page,
+                };
+            }
+            return {
+                blockType: block.BlockType,
+                confidence: block.Confidence,
+                text: block.Text,
+                left: block.Geometry.BoundingBox.Left,
+                top: block.Geometry.BoundingBox.Top,
+                width: block.Geometry.BoundingBox.Width,
+                height: block.Geometry.BoundingBox.Height,
+                page: block.Page,
+            };
+        });
+
+        // Send page data and page id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            letterId
+        };
+
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabaseClient.functions.invoke('summarize-text', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
+        }
+        const progress = Math.floor((currentPage / totalPages) * 100);
+        summaryCallback(progress, "text");
+    }
+};
+
+const summarizeLetterTables = async (blocks, letterId, supabaseClient, summaryCallback) => {
+
+    const totalPages = blocks.length;
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].page;
+        console.log(`Processing Tables page ${currentPage}`);
+
+        const preProcessedPageData = pageData.map((block) => {
+            return {
+                page: block.page,
+                confidence: block.confidence,
+                left: block.left,
+                top: block.top,
+                right: block.right,
+                bottom: block.bottom,
+                title: block.title,
+                footer: block.footer,
+                cells: block.cells
+            };
+        });
+
+        // Send page data and page id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            letterId,
+        };
+
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabaseClient.functions.invoke('summarize-table', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
+        }
+
+        const progress = Math.floor((currentPage / totalPages) * 100);
+        summaryCallback(progress, "table");
+    }
+
+};
+
+const summarizeLetterForms = async (blocks, letterId, supabaseClient, summaryCallback) => {
+
+    const totalPages = blocks.length;
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].page;
+        console.log(`Processing Key-Value page ${currentPage}`);
+
+        const preProcessedPageData = pageData.map((block) => {
+            return {
+                page: block.page,
+                confidence: Math.min(block.keyConfidence, block.valueConfidence),
+                left: block.left,
+                top: block.top,
+                right: block.right,
+                bottom: block.bottom,
+                key: block.key,
+                value: block.value,
+            };
+        });
+
+        // Send page data and record id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            letterId
+        };
+
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabaseClient.functions.invoke('summarize-kv', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
+        }
+
+        const progress = Math.floor((currentPage / totalPages) * 100);
+        summaryCallback(progress, "kv");
+    }
+
+};
+    
+
+
 export const createFileSupabase = async (jobId, file, inputTemplateId, user, supabaseClient, stage, setUploadStage) => {
 
     // check if a record with this jobId already exists in the medical_records table

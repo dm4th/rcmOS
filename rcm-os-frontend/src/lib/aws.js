@@ -20,7 +20,7 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
     }
     
     // Request Pre-Signed URL from API Gateway
-    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL, {
+    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL + 'record', {
         fileName: file.name,
     });
     const url = JSON.parse(urlRes.data.body).url;
@@ -46,41 +46,80 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
         return;
     }
 
-    // Kick off Textract Processing
-    const textractRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+    // Kick off File Processing
+    const processRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
         S3Object: {
-            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET,
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET + 'records',
             Name: file.name,
         },
     });
-    const jobId = JSON.parse(textractRes.data.body).JobId;
+    const jobId = JSON.parse(processRes.data.body).JobId;
 
     return jobId;
 };
 
-export const textractOCR = async (jobId, pollStageId, retrieveStageId, setUploadStage) => {
-    // Poll Textract Job Status
-    console.log(jobId);
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[pollStageId].active = true;
-        return newState;
+export const uploadAWS = async (file, resource, uploadCallback) => {
+    // Function to upload a file to AWS S3
+    // file: the file object to upload
+    // resource: the resource type to upload to (e.g. 'record', 'letter')
+    // uploadCallback: a function to update the upload progress
+
+    // If file type is not a pdf, return nothing
+    if (file.type !== 'application/pdf') {
+        alert('Please upload a PDF file.');
+        return;
+    }
+
+    // Request Pre-Signed URL from API Gateway
+    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL + resource, {
+        fileName: file.name,
     });
-    const pages = await pollJobAWS(jobId, pollStageId, setUploadStage);
+    const url = JSON.parse(urlRes.data.body).url;
+
+    // Upload file to S3 with Pre-Signed URL
+    const uploadRes = await axios.put(url, file, {
+        headers: {
+            'Content-Type': 'application/pdf',
+        },
+        onUploadProgress: (progressEvent) => {
+            const { loaded, total } = progressEvent;
+            const percent = Math.floor((loaded / total) * 100);
+            uploadCallback(percent);
+        }
+    });
+
+    if (uploadRes.status !== 200) {
+        alert('Error uploading file to S3');
+        return;
+    }
+
+    // Kick off File Processing
+    const processingRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
+        S3Object: {
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET + resource + 's',
+            Name: file.name,
+        },
+    });
+
+    const jobId = JSON.parse(processingRes.data.body).JobId;
+    const jobType = JSON.parse(processingRes.data.body).JobType;
+    const jobOutput = JSON.parse(processingRes.data.body).JobOutput;
+
+    return { jobId, jobType, jobOutput };
+}
+
+export const textractOCR = async (jobId, pollingCallback, processingCallback) => {
+    // Poll Textract Job Status
+    const pages = await pollJobAWS(jobId, pollingCallback);
     if (!pages) return;
 
     // Retrieve Full Textract Results
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[retrieveStageId].active = true;
-        return newState;
-    });
-    const results = await getResultsAWS(jobId, retrieveStageId, setUploadStage);
+    const results = await getResultsAWS(jobId, processingCallback);
     if (!results) return;
     return results;
 };
 
-const pollJobAWS = async (jobId, stage, setUploadStage) => {
+const pollJobAWS = async (jobId, pollingCallback) => {
     // Poll Textract Job Status
     let jobStatus = 'IN_PROGRESS';
     let statusRes;
@@ -91,25 +130,18 @@ const pollJobAWS = async (jobId, stage, setUploadStage) => {
             setTimeout(resolve, 2000);
         });
 
-        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
             JobId: jobId,
         });
         jobStatus = JSON.parse(statusRes.data.body).JobStatus;
-        uploadTracker++;
         if (uploadTracker >= 95) {
-            setUploadStage((prevState) => {
-                const newState = [...prevState];
-                newState[stage].stage = 'Processing Document with AWS Textract - Taking Longer than Expected';
-                newState[stage].progress = 95;
-                return newState;
-            });
+            uploadTracker = uploadTracker + 0.1;
+            pollingCallback(uploadTracker);
         }
-        else setUploadStage((prevState) => {
-            const newState = [...prevState];
-            newState[stage].stage = 'Processing Document with AWS Textract';
-            newState[stage].progress = uploadTracker;
-            return newState;
-        });
+        else {
+            uploadTracker++;
+            pollingCallback(uploadTracker);
+        }
     }
 
     // If job status is not SUCCEEDED, return null
@@ -119,16 +151,11 @@ const pollJobAWS = async (jobId, stage, setUploadStage) => {
         return null;
     }
 
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[stage].stage = 'Processing Document with AWS Textract';
-        newState[stage].progress = 100;
-        return newState;
-    });
+    pollingCallback(100);
     return JSON.parse(statusRes.data.body).Metadata.Pages;
 };
 
-const getResultsAWS = async (jobId, stage, setUploadStage) => {
+const getResultsAWS = async (jobId, processingCallback) => {
     // Retrieve Full Textract Results
     let nextToken = null;
     let first = true;
@@ -152,12 +179,12 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
         let jobRes;
         if (first) {
             first = false;
-            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
                 JobId: jobId,
             });
             totalPages = JSON.parse(jobRes.data.body).Metadata.Pages * 3.0; // Need to do each page three times
         } else {
-            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
                 JobId: jobId,
                 NextToken: nextToken,
             });
@@ -193,11 +220,7 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
         const maxTablePage = returnTableBlocks.length > 0 ? Math.max(...returnTableBlocks.map((block) => block.page)) : 0;
         const maxKvPage = returnKvBlocks.length > 0 ? Math.max(...returnKvBlocks.map((block) => block.page)) : 0;
         const processedPages = maxLinePage + maxTablePage + maxKvPage;
-        setUploadStage((prevState) => {
-            const newState = [...prevState];
-            newState[stage].progress = Math.floor((processedPages / totalPages) * 100);
-            return newState;
-        });
+        processingCallback(Math.floor((processedPages / totalPages) * 100));
     }
 
     // Handle any leftover blocks
@@ -226,11 +249,7 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
     }
 
 
-    setUploadStage((prevState) => {
-        const newState = [...prevState];
-        newState[stage].progress = 100;
-        return newState;
-    });
+    processingCallback(100);
     // return an array of arrays for each page of line blocks, an array of arrays for each page of table blocks, and an array of arrays for each page of kv blocks
     return {
         textBlocks,
