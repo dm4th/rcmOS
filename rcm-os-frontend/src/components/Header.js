@@ -25,6 +25,7 @@ export function Header() {
     return (
         <header className="flex justify-between items-center p-4 border-b-2 border-gray-800 dark:border-gray-300 bg-gray-200 dark:bg-gray-800">
             {userButton}
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Old Version of App</h1>
             <div>
                 <label className="text-gray-900 dark:text-white">
                     <input type="checkbox" checked={theme === 'dark'} onChange={toggleTheme} className="m-2" />
