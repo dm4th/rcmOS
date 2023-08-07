@@ -6,6 +6,7 @@ import { CSSTransition } from 'react-transition-group';
 import { ClaimInput } from '@/components/claims/ClaimInput';
 import { ClaimProcessing } from '@/components/claims/ClaimProcessing';
 import { DenialSummary } from '@/components/claims/DenialSummary';
+import { ClaimRoute } from '@/components/claims/ClaimRoute';
 
 // Context Imports
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
@@ -18,7 +19,7 @@ export function ClaimInputModal({ onClose }) {
 
     const { user, updateAvailableClaims, supabaseClient } = useSupaUser();
 
-    const [modalStage, setModalStage] = useState('claim'); // claim, denialProcessing, denialSummary
+    const [modalStage, setModalStage] = useState('claim'); // claim, denialProcessing, denialSummary, closeOut
     const [transitioningState, setTransitioningState] = useState(false);
 
     const [progressValues, setProgressValues] = useState(null);
@@ -39,6 +40,8 @@ export function ClaimInputModal({ onClose }) {
                         return 'denialProcessing';
                     case 'denialProcessing':
                         return 'denialSummary'
+                    case 'denialSummary':
+                        return 'closeOut'
                     default:
                         return 'claim'
                 }
@@ -103,7 +106,7 @@ export function ClaimInputModal({ onClose }) {
         if (error) {
             console.error(error);
         }
-        onClose();
+        handleNextStage();
     }
 
     const handleDenialLetterUpload = async (file, claimId) => {
@@ -163,9 +166,9 @@ export function ClaimInputModal({ onClose }) {
 
         // Upload the file to AWS and Kick Off Processing
         // const { jobId, jobType, jobOutput } = await uploadAWS(file, 'letter', uploadCallback);
-        const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
+        // const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
         // console.log(jobId);
-        // const jobId = 'af29cf7a4e0b55c02333e107da29301d9982e64bf3a33bb43315f352990b5ae5';
+        const jobId = '93d6891f221752791c28000cb247b0903918b88ddc1d6b231abed5653c87b2c4';
         uploadCallback(100);
 
         // Perform OCR on the File using Textract
@@ -275,6 +278,14 @@ export function ClaimInputModal({ onClose }) {
                     unmountOnExit={true}
                 >
                     <DenialSummary summary={denialLetterSummary} letterId={denialLetterId} handleSubmit={handleSummarySubmit}  />
+                </CSSTransition>
+                <CSSTransition
+                    in={modalStage === 'closeOut' && !transitioningState}
+                    timeout={300}
+                    classNames="fade"
+                    unmountOnExit={true}
+                >
+                    <ClaimRoute claimId={claimIdState} onClose={onClose}  />
                 </CSSTransition>
             </div>
         </div>

@@ -22,8 +22,7 @@ export function ClaimsDashboard({ onNewClaim }) {
     };
 
     const handleClaimClick = (claimId) => {
-        // router.push(`/claims/${claimId}`);
-        alert('Not implemented yet');
+        router.push(`/claims/${claimId}`);
     };
 
     function toTitleCase(str) {
