@@ -21,7 +21,7 @@ export function Intro() {
     return (
         <div>
             <h1 className="text-6xl font-bold text-gray-900 dark:text-white">
-                Welcome to rcmOS
+                Welcome to Peel
             </h1>
             {content}
         </div>

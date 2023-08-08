@@ -278,6 +278,12 @@ AS PERMISSIVE FOR UPDATE
 TO anon
 USING (true);
 
+CREATE POLICY "Enable insert access for anon" 
+ON "public"."claim_documents"
+AS PERMISSIVE FOR INSERT
+TO anon
+WITH CHECK (true);
+
 GRANT ALL ON TABLE "public"."claim_documents" TO "anon";
 GRANT ALL ON TABLE "public"."claim_documents" TO "authenticated";
 GRANT ALL ON TABLE "public"."claim_documents" TO "service_role";

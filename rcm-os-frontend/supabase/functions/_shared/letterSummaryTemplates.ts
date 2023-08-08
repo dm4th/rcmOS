@@ -73,6 +73,37 @@ export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber:
     );
 });
 
+export const textDataTemplate = ((pageNumber: number | string, sectionNumber: number) => {
+
+    return PromptTemplate.fromTemplate(
+        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
+        `The primary goal of your analysis is to determine if the text from the letter matches any common data elements listed below.\n` +
+        `Below is a markdown formatted table of text pulled from section ${sectionNumber} on page ${pageNumber} of an insurance denial letter using machine learning / OCR. The table contains the following columns:\n` +
+        "1. Text: The text retrieved from the document\n" +
+        "2. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 99.5 should be viewed very cautiously.\n" +
+        "3. Left: A percentage representing how far left on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
+        "4. Top: A percentage representing how far up on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
+        "5. Width: A percentage representing how far across the page the text spans. 0% means the text has no width at all, 100% means the text spans across the entire page.\n" +
+        "6. Height: A percentage representing how tall the text is on the page. 0% means the text has no height at all, 100% means the text spans the entire height of the page.\n" +
+        "\nBelow is the data for the retrieved page:\n\n" +
+        "{markdownTable}" +
+        `\n\nBelow is a markdown formatted table containing common medical data elements that are pertinent to any appeal. The table contains the following columns:\n` +
+        "1. Field: The name of the medical data element you are looking for.\n" +
+        "2. Medical Terms: Common medical terms that are associated with describing this data element.\n" +
+        "3. Description: description of the data element.\n" +
+        "4. Additional LLM Instructions: Additional Instructions for you to observe when you summarize your findings regarding this element.\n" +
+        "\nBelow is the data for the common medical data elements:\n\n" +
+        "{dataElementsTable}" +
+        `\n\nGiven the above information about the text retrieved from the denial letter and common data elements to search for, can you find any elements in this text?\n` +
+        `For every data element you find, please respond in the following format:\n` +
+        `FIELD: <name of the field>\n` +
+        `SUMMARY: very short statement of why this text matches this data element.\n` +
+        `If you cannot find any data elements in this text, please respond by saying 'NONE'\n` +
+        `If you find multiple data elements in this text, please respond with each data element on a new line and include all of the ones you find.` +
+        `Please only respond with data elements that you are very confident in. If you are not confident in your answer, please respond with 'NONE'.`
+    );
+});
+
 export const tableSummaryTemplate = ((tablePrompt: string, sectionNumber: number) => {
 
     return PromptTemplate.fromTemplate(
