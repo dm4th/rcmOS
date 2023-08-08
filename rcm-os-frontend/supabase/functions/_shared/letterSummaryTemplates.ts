@@ -73,11 +73,13 @@ export const textSummaryTemplate = ((pageNumber: number | string, sectionNumber:
     );
 });
 
-export const textDataTemplate = ((pageNumber: number | string, sectionNumber: number) => {
+export const textSectionTemplate = ((pageNumber: number | string, sectionNumber: number, markdownTable: string, dataElementsTable: string) => {
 
-    return PromptTemplate.fromTemplate(
-        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
-        `The primary goal of your analysis is to determine if the text from the letter matches any common data elements listed below.\n` +
+    return `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
+        `Your objectives are:\n` +
+        `1. Determine why the insurance claim was denied.\n` + 
+        `2. Determine if the text from the letter matches any common data elements listed below.\n` +
+        `These are separate goals, so please respond to each one separately. It is possible to find a reason for the denial without finding any common data elements and vice versa.` +
         `Below is a markdown formatted table of text pulled from section ${sectionNumber} on page ${pageNumber} of an insurance denial letter using machine learning / OCR. The table contains the following columns:\n` +
         "1. Text: The text retrieved from the document\n" +
         "2. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 99.5 should be viewed very cautiously.\n" +
@@ -86,22 +88,26 @@ export const textDataTemplate = ((pageNumber: number | string, sectionNumber: nu
         "5. Width: A percentage representing how far across the page the text spans. 0% means the text has no width at all, 100% means the text spans across the entire page.\n" +
         "6. Height: A percentage representing how tall the text is on the page. 0% means the text has no height at all, 100% means the text spans the entire height of the page.\n" +
         "\nBelow is the data for the retrieved page:\n\n" +
-        "{markdownTable}" +
+        markdownTable +
         `\n\nBelow is a markdown formatted table containing common medical data elements that are pertinent to any appeal. The table contains the following columns:\n` +
         "1. Field: The name of the medical data element you are looking for.\n" +
         "2. Medical Terms: Common medical terms that are associated with describing this data element.\n" +
         "3. Description: description of the data element.\n" +
         "4. Additional LLM Instructions: Additional Instructions for you to observe when you summarize your findings regarding this element.\n" +
         "\nBelow is the data for the common medical data elements:\n\n" +
-        "{dataElementsTable}" +
-        `\n\nGiven the above information about the text retrieved from the denial letter and common data elements to search for, can you find any elements in this text?\n` +
+        dataElementsTable +
+        `\n\nGiven the above information about the text retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this text?\n` +
+        `For this section of the letter, please respond in the following format:\n` +
+        `VALID: <True/False>\tOnly respond with true if you can confidently explain the medical reason for the insurance claim denial.\n` +
+        `REASON: <explanation for why you can/cannot determine the medical cause for the insurance claim denial>\tThis reasoning only pertains to goal 1 and not to goal 2.\n` +
         `For every data element you find, please respond in the following format:\n` +
-        `FIELD: <name of the field>\n` +
+        `FIELD: <name of the field>\tThis must match a field value in the common data elements table above.\n` +
         `SUMMARY: very short statement of why this text matches this data element.\n` +
-        `If you cannot find any data elements in this text, please respond by saying 'NONE'\n` +
-        `If you find multiple data elements in this text, please respond with each data element on a new line and include all of the ones you find.` +
-        `Please only respond with data elements that you are very confident in. If you are not confident in your answer, please respond with 'NONE'.`
-    );
+        `VALUE: <value of the field>\tThis is the value of the field you found in the text.\n` +
+        "Please only respond with VALID = True for goal 1 if you can determine the medical cause of the denial with a high degree of confidence. If you are not confident in your answer, please respond with VALID = False.\n" +
+        `If you cannot find any data elements in this text, particularly a specific FIELD value, please do not add any FIELD, SUMMARY, or VALUE outputs.\n` +
+        `If you find multiple data elements in this text, please respond with each data element on a new line and include all of the ones you find.`;
+
 });
 
 export const tableSummaryTemplate = ((tablePrompt: string, sectionNumber: number) => {

@@ -2,12 +2,14 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
 import { textMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
-import { textSummaryTemplate, textDataTemplate } from '../_shared/letterSummaryTemplates.ts';
+import { textSectionTemplate } from '../_shared/letterSummaryTemplates.ts';
 import { commonDataElementsMarkdown } from '../_shared/dataElements.ts';
-import { OpenAI } from "https://esm.sh/langchain/llms/openai";
-import { LLMChain } from "https://esm.sh/langchain/chains";
-// import { ChatOpenAI} from "https://esm.sh/langchain/chat_models/openai";
-// import { createExtractionChainFromZod } from "https://esm.sh/langchain/chains";
+// import { OpenAI } from "https://esm.sh/langchain/llms/openai";
+// import { LLMChain } from "https://esm.sh/langchain/chains";
+import { z } from "https://esm.sh/zod";
+import { ChatOpenAI} from "https://esm.sh/langchain/chat_models/openai";
+import { createExtractionChainFromZod } from "https://esm.sh/langchain/chains";
+import { data } from 'autoprefixer';
 
 const openai_api_key = Deno.env.get("OPENAI_API_KEY");
 
@@ -52,7 +54,7 @@ async function handler(req: Request) {
         const pageMarkdownArray = textMarkdownTableGenerator(markdownHeaders, markdownArray);
 
         // Create a new model instance
-        const model = new OpenAI({
+        const model = new ChatOpenAI({
             openAIApiKey: openai_api_key,
             temperature: 0.1,
             maxTokens: 200,
@@ -62,42 +64,44 @@ async function handler(req: Request) {
         });
 
         // Create Zod schema for LangChain Function
-        const dataElementMarkdown = await commonDataElementsMarkdown(["denial_letter", "all"]);
-
+        const { dataElementsTable, dataElementsMarkdown } = await commonDataElementsMarkdown(["denial_letter", "all"]);
+        const outputSchema = z.object({
+            relevant: z.boolean(),
+            reason: z.string(),
+            elements: z.array(z.object({
+                field: z.string(),
+                summary: z.string(),
+                value: z.string(),
+            })).optional(),
+        });
 
         // STEP 1: Find Valid Medical Reasons for Claim Denial
         // STEP 2: Check letter sections against common data elements
         // Create async promises to summarize the page markdown using the LLM
-        const summaryPromises = [];
-        const dataElementPromises = [];
+        const sectionPromises = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
-            const summaryPrompt = textSummaryTemplate(pageNumber, i);
-            const dataElementPrompt = textDataTemplate(pageNumber, i);
+            const sectionPrompt = textSectionTemplate(pageNumber, i, pageMarkdownArray[i].text, dataElementsMarkdown);
+            // const dataElementPrompt = textDataTemplate(pageNumber, i);
 
             // Create LLM Chain
-            const summaryChain = new LLMChain({
-                llm: model,
-                prompt: summaryPrompt,
-            });
-            const dataElementChain = new LLMChain({
-                llm: model,
-                prompt: dataElementPrompt,
-            });
+            const sectionChain = new createExtractionChainFromZod(outputSchema, model);
 
             // Run the LLM Chain
-            summaryPromises.push(summaryChain.call({markdownTable: pageMarkdownArray[i].text}));
-            dataElementPromises.push(dataElementChain.call({markdownTable: pageMarkdownArray[i].text, dataElementMarkdown: dataElementMarkdown}));
+            sectionPromises.push(sectionChain.run(sectionPrompt));
         }
 
         // Wait for all the page section summaries to be generated
-        const summaryResults = await Promise.all(summaryPromises);
-        const dataElementResults = await Promise.all(dataElementPromises);
+        const sectionResults = await Promise.all(sectionPromises);
 
         // loop over the page sections, embed the data, and write to the database
         const summaryInsertRows = [];
-        for (let i = 0; i < summaryResults.length; i++) {
-            const sectionOutputText = summaryResults[i].text;
-            console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
+        const dataElementInsertRows = [];
+        for (let i = 0; i < sectionResults.length; i++) {
+            console.log(`Page ${pageNumber} Section ${i}\n`);
+            console.log(sectionResults[i]);
+            const valid = sectionResults[i].valid;
+            const reason = sectionResults[i].reason;
+            const elements = sectionResults[i].elements;
 
             // Generate embedding for the page section summary
             const embeddingUrl = "https://api.openai.com/v1/embeddings";
@@ -106,35 +110,31 @@ async function handler(req: Request) {
                 "Authorization": `Bearer ${openai_api_key}`
             };
 
-            const embeddingBody = JSON.stringify({
-                "input": sectionOutputText,
+            const reasonEmbeddingBody = JSON.stringify({
+                "input": reason,
                 "model": "text-embedding-ada-002",
             });
 
             // loop until the embedding is generated
             // if embeddingJson.data is undefined, then the embedding is not ready
-            let calculateEmbedding = true;
-            let sectionEmbedding;
-            while (calculateEmbedding) {
+            let reasonCalculateEmbedding = true;
+            let reasonEmbedding;
+            while (reasonCalculateEmbedding) {
                 const embeddingResponse = await fetch(embeddingUrl, {
                     method: "POST",
                     headers: embeddingHeaders,
-                    body: embeddingBody
+                    body: reasonEmbeddingBody
                 });
                 const embeddingJson = await embeddingResponse.json();
                 if (embeddingJson.data) {
-                    sectionEmbedding = embeddingJson.data[0].embedding;
-                    calculateEmbedding = false;
+                    reasonEmbedding = embeddingJson.data[0].embedding;
+                    reasonCalculateEmbedding = false;
                 } else {
                     console.log("Embedding not ready yet, waiting 1 second...");
                     console.log(embeddingResponse.status, embeddingResponse.statusText);
                     await new Promise(r => setTimeout(r, 1000));
                 }
             }
-
-            // Generate the validity and reason for the page section summary
-            const valid = sectionOutputText.split("VALID:")[1].split("REASON:")[0].trim().toLowerCase() === "yes";
-            const reason = sectionOutputText.split("REASON:")[1].trim();
 
             summaryInsertRows.push({
                 "letter_id": letterId,
@@ -143,84 +143,60 @@ async function handler(req: Request) {
                 "section_number": i,
                 "valid": valid,
                 "reason": reason,
-                "section_embedding": sectionEmbedding,
+                "section_embedding": reasonEmbedding,
                 "left": pageMarkdownArray[i].left,
                 "top": pageMarkdownArray[i].top,
                 "right": pageMarkdownArray[i].right,
                 "bottom": pageMarkdownArray[i].bottom,
             });
-        }
 
-        // loop over the page sections, embed the data, and write to the database
-        const dataElementInsertRows = [];
-        for (let i = 0; i < dataElementResults.length; i++) {
-            const sectionOutputText = dataElementResults[i].text;
-            console.log(`Page ${pageNumber} Section ${i}\nOutput:\n${sectionOutputText}`);
-            if (sectionOutputText.includes("NONE")) {
-                continue;
-            }
+            if (elements) {
+                for (let e = 0; e < elements.length; e++) {
+                    const field = elements[e].field;
+                    const summary = elements[e].summary;
+                    const value = elements[e].value;
 
-            // Need to check the text for multiple instances of FIELD
-            const fieldArray = sectionOutputText.split("FIELD:");
-            const summaryArray = sectionOutputText.split("SUMMARY:");
-            const fieldSummaryArray = [];
-            for (let j = 0; j < fieldArray.length; j++) {
-                const field = fieldArray[j].split("SUMMARY:")[0].trim();
-                const summary = summaryArray[j].trim();
-                fieldSummaryArray.push({
-                    "field": field,
-                    "summary": summary,
-                });
-            }
-
-            // Generate embedding for the each data element pairing
-            const embeddingUrl = "https://api.openai.com/v1/embeddings";
-            const embeddingHeaders = {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${openai_api_key}`
-            };
-
-            for (let j = 0; j < fieldSummaryArray.length; j++) {
-                const embeddingBody = JSON.stringify({
-                    "input": fieldSummaryArray[j].field + ': ' + fieldSummaryArray[j].summary,
-                    "model": "text-embedding-ada-002",
-                });
-
-                // loop until the embedding is generated
-                // if embeddingJson.data is undefined, then the embedding is not ready
-                let calculateEmbedding = true;
-                let sectionEmbedding;
-                while (calculateEmbedding) {
-                    const embeddingResponse = await fetch(embeddingUrl, {
-                        method: "POST",
-                        headers: embeddingHeaders,
-                        body: embeddingBody
+                    const dataElementEmbeddingBody = JSON.stringify({
+                        "input": field + ': ' + summary,
+                        "model": "text-embedding-ada-002",
                     });
-                    const embeddingJson = await embeddingResponse.json();
-                    if (embeddingJson.data) {
-                        sectionEmbedding = embeddingJson.data[0].embedding;
-                        calculateEmbedding = false;
-                    } else {
-                        console.log("Embedding not ready yet, waiting 1 second...");
-                        console.log(embeddingResponse.status, embeddingResponse.statusText);
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                }
-                fieldSummaryArray[j].embedding = sectionEmbedding;
 
-                dataElementInsertRows.push({
-                    "letter_id": letterId,
-                    "page_number": pageNumber,
-                    "section_type": "text",
-                    "section_number": i,
-                    "field": fieldSummaryArray[j].field,
-                    "summary": fieldSummaryArray[j].summary,
-                    "embedding": fieldSummaryArray[j].embedding,
-                    "left": pageMarkdownArray[i].left,
-                    "top": pageMarkdownArray[i].top,
-                    "right": pageMarkdownArray[i].right,
-                    "bottom": pageMarkdownArray[i].bottom,
-                });
+                    // loop until the embedding is generated
+                    let dataElementCalculateEmbedding = true;
+                    let dataElementEmbedding;
+                    while (dataElementCalculateEmbedding) {
+                        const embeddingResponse = await fetch(embeddingUrl, {
+                            method: "POST",
+                            headers: embeddingHeaders,
+                            body: dataElementEmbeddingBody
+                        });
+                        const embeddingJson = await embeddingResponse.json();
+                        if (embeddingJson.data) {
+                            dataElementEmbedding = embeddingJson.data[0].embedding;
+                            dataElementCalculateEmbedding = false;
+                        } else {
+                            console.log("Embedding not ready yet, waiting 1 second...");
+                            console.log(embeddingResponse.status, embeddingResponse.statusText);
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
+                    }
+
+                    dataElementInsertRows.push({
+                        "letter_id": letterId,
+                        "page_number": pageNumber,
+                        "section_type": "text",
+                        "section_number": i,
+                        "field": field,
+                        "summary": summary,
+                        "value": value,
+                        "embedding": dataElementEmbedding,
+                        "left": pageMarkdownArray[i].left,
+                        "top": pageMarkdownArray[i].top,
+                        "right": pageMarkdownArray[i].right,
+                        "bottom": pageMarkdownArray[i].bottom,
+                    });
+
+                }
             }
         }
 
@@ -235,12 +211,12 @@ async function handler(req: Request) {
         }
 
         // Write the page data elements to the database
-        const { error: dataElementError } = await supabaseClient
-            .from("data_elements")
-            .insert(dataElementInsertRows)
-        if (dataElementError) {
-            throw new Error(dataElementError.message);
-        }
+        // const { error: dataElementError } = await supabaseClient
+        //     .from("data_elements")
+        //     .insert(dataElementInsertRows)
+        // if (dataElementError) {
+        //     throw new Error(dataElementError.message);
+        // }
 
         // Return 200 response with the page summary data
         const headers = new Headers(corsHeaders);

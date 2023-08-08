@@ -1,0 +1,15 @@
+{
+  "providers": {
+    "awscloudformation": {
+      "AmplifyAppId": "d1v3r3l45ocapu",
+      "AuthRoleArn": "arn:aws:iam::868200275215:role/amplify-rcmosfrontend-dev-141137-authRole",
+      "AuthRoleName": "amplify-rcmosfrontend-dev-141137-authRole",
+      "DeploymentBucketName": "amplify-rcmosfrontend-dev-141137-deployment",
+      "Region": "us-east-2",
+      "StackId": "arn:aws:cloudformation:us-east-2:868200275215:stack/amplify-rcmosfrontend-dev-141137/2a5ad4f0-3630-11ee-9e56-06d922cd5ca1",
+      "StackName": "amplify-rcmosfrontend-dev-141137",
+      "UnauthRoleArn": "arn:aws:iam::868200275215:role/amplify-rcmosfrontend-dev-141137-unauthRole",
+      "UnauthRoleName": "amplify-rcmosfrontend-dev-141137-unauthRole"
+    }
+  }
+}
