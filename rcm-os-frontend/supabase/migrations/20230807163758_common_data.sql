@@ -27,17 +27,17 @@ VALUES
     ('Hospital Account Number', NULL, 'Account number for the hospital', 'all', NULL),
     ('Hospital Medical Record Number', NULL, 'Medical record number from the hospital', 'all', NULL),
     ('Hospital Name', NULL, 'Name of the hospital', 'all', NULL),
-    ('Dates of Service (DOS)', NULL, 'Dates for medical service to the patient at the hospital', 'all', NULL),
-    ('Date of Birth', NULL, 'Date of birth for the patient', 'all', NULL),
+    ('Dates of Service (DOS)', NULL, 'Dates for medical service to the patient at the hospital', 'all', 'Please only return a date formatted as mm/dd/yyyy'),
+    ('Date of Birth', NULL, 'Date of birth for the patient', 'all', 'Please only return a date formatted as mm/dd/yyyy'),
     ('Discharge Code', NULL, 'Code pertaining to the reason for discharging the patient', 'all', NULL),
     ('Payer', NULL, 'The entity responsible for payment for medical services rendered', 'all', NULL),
-    ('Date/Time of IP Order', NULL, 'Date and time of the order for inpatient services', 'all', NULL),
-    ('Date/Time of Discharge', NULL, 'Date and time of the discharge of the patient', 'all', NULL),
+    ('Date/Time of IP Order', NULL, 'Date and time of the order for inpatient services', 'all', 'Please only return a date formatted as mm/dd/yyyy or a time in mm/dd/yyyy HH:MM:SS format'),
+    ('Date/Time of Discharge', NULL, 'Date and time of the discharge of the patient', 'all', 'Please only return a date formatted as mm/dd/yyyy or a time in mm/dd/yyyy HH:MM:SS format'),
     ('IP Time Elapsed', NULL, 'Time elapsed for the inpatient services', 'none', NULL),
     ('Authorization Number', NULL, 'Number for the authorization of the medical services', 'all', NULL),
     ('CARC Code / Issue Category', NULL, 'Code for the reason for denial of the claim', 'all', NULL),
-    ('Appeal/Recon Date', NULL, 'Date of the appeal or reconsideration of the claim', 'all', NULL),
-    ('Claim Date', NULL, 'Date of the claim for timely filing', 'all', NULL),
+    ('Appeal/Recon Date', NULL, 'Date of the appeal or reconsideration of the claim', 'all', 'Please only return a date formatted as mm/dd/yyyy'),
+    ('Claim Date', NULL, 'Date of the claim for timely filing', 'all', 'Please only return a date formatted as mm/dd/yyyy'),
     ('Primary Diagnosis Code', NULL, 'Primary diagnosis code for the patient', 'all', NULL),
     ('Past Medical History Diagnoses', NULL, 'Past medical history diagnoses for the patient', 'all', NULL),
     ('Temperature', 'Afebrile, Febrile', 'Patient temperature', 'medical_record', NULL),
@@ -62,3 +62,48 @@ VALUES
     ('Abnormal', NULL, 'Something atypical is happening to the patient', 'medical_record', 'Be sure to cite specifically what the abnormality is related too'),
     ('EKG Result/Impression', 'EKG, Electrocardiogram', 'Electrical tracing of patient heart rhythm', 'medical_record', NULL),
     ('Imaging Results', 'X-Ray, CT, MRI, etc.', 'Results from patient imaging scans', 'medical_record', NULL);
+
+-- Create Table to store data elements for claims processing
+
+CREATE TABLE "public"."document_data_elements" (
+    "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL,
+    "document_type" "text" NOT NULL,
+    "document_id" "uuid" NOT NULL,
+    "page_number" "int4" NOT NULL,
+    "section_type" "text" NOT NULL,
+    "section_number" "int4" NOT NULL,
+    "sub_section_number" "int4",
+    "field_id" "uuid" NOT NULL,
+    "field_name" "text" NOT NULL,
+    "field_value" "text" NOT NULL,
+    "field_summary" "text" NOT NULL,
+    "left" "float4" NOT NULL,
+    "top" "float4" NOT NULL,
+    "right" "float4" NOT NULL,
+    "bottom" "float4" NOT NULL
+);
+
+ALTER TABLE "public"."document_data_elements" OWNER TO "postgres";
+
+ALTER TABLE ONLY "public"."document_data_elements"
+    ADD CONSTRAINT "document_data_elements_pkey" PRIMARY KEY ("id");
+
+ALTER TABLE "public"."document_data_elements" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable ALL for service-role only" 
+ON "public"."document_data_elements" 
+TO "service_role" 
+USING (true) 
+WITH CHECK (true);
+
+CREATE POLICY "Enable read access for anon" 
+ON "public"."document_data_elements"
+AS PERMISSIVE FOR SELECT
+TO anon
+USING (true);
+
+CREATE POLICY "Enable insert access for anon" 
+ON "public"."document_data_elements"
+AS PERMISSIVE FOR INSERT
+TO anon
+WITH CHECK (true);

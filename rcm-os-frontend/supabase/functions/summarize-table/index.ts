@@ -2,9 +2,13 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
 import { tableMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
-import { tableSummaryTemplate } from '../_shared/letterSummaryTemplates.ts';
-import { OpenAI } from "https://esm.sh/langchain/llms/openai";
+import { tableSectionTemplate } from '../_shared/letterSummaryTemplates.ts';
+import { commonDataElementsMarkdown } from '../_shared/dataElements.ts';
+import { z } from "https://esm.sh/zod";
+import { ChatOpenAI } from "https://esm.sh/langchain/chat_models/openai";
 import { LLMChain } from "https://esm.sh/langchain/chains";
+import { StructuredOutputParser, OutputFixingParser } from "https://esm.sh/langchain/output_parsers";
+
 
 const TABLE_SUMMARY_CONFIDENCE_THRESHOLD = 0.5;
 
@@ -28,18 +32,50 @@ async function handler(req: Request) {
         const pageNumber = pageData[0].page;
         const markdownHeaders = ["Text", "Confidence", "Column Index", "Row Index", "Column Span", "Row Span"];
 
+        // Commond data elements markdown table
+        const { dataElementsTable, dataElementsMarkdown } = await commonDataElementsMarkdown(["denial_letter", "all"]);
+
         // Create a new model instance
-        const model = new OpenAI({
+        const model = new ChatOpenAI({
             openAIApiKey: openai_api_key,
-            temperature: 0.1,
-            maxTokens: 200,
+            temperature: 0,
             frequencyPenalty: 0,
             presencePenalty: 0,
             modelName: "gpt-3.5-turbo",
         });
 
+        // Create Zod schema for LangChain Function
+        const outputSchema = z.object({
+            relevant: z.boolean().describe('Only true if the information in the table is relevant to the MEDICAL reason for the claim denial. Defer to false if not 100% certain of the medical reasoning. The reason must be medical and not administrative.'),
+            reason: z.string().describe('A summary of the MEDICAL reason for the claim denial (or just "None" if the information in the table is not relevant to the medical reason for the claim denial)'),
+            elements: z.array(z.object({
+                id: z.string().describe('The ID of the data element you have found a value for in the processed text.'),
+                field: z.string().describe('The field of the data element matching the exact text in the common data elements table'),
+                summary: z.string().describe('A summary of the data element matching the exact text in the common data elements table and why it matches'),
+                value: z.string().describe('The value of the data element that caused you to believe there was a match to a common data element. Be sure to provide your output in the output specified in the "Additional LLM Instructions" column of the common data elements table if available. If you cannot provide your value in the specified format, your return value should be "N/A".'),
+            })).optional().describe('An array of data elements found in the table that match a field in the common data elements table. If no data elements are found, this field will not be present.'),
+        });
+        const outputParser = StructuredOutputParser.fromZodSchema(outputSchema);
+
+        // Create LangChain Output Parser object
+        const outputFixingParser = OutputFixingParser.fromLLM(
+            model,
+            outputParser
+        );
+
+        // Create prompt template for the LLM to summarize the table
+        const prompt = tableSectionTemplate(outputFixingParser);
+
+        // Create the prompt chain to call the LLM
+        const llmChain = new LLMChain({
+            llm: model,
+            prompt: prompt,
+            outputParser: outputFixingParser,
+        });
+
         // Create insertRows array to store the new rows to be inserted into the database and tablePromises array to hold LLM summary async promises
-        const insertRows = [];
+        const summaryInsertRows = [];
+        const dataElementInsertRows = [];
         const tablePromises = [];
 
         // Loop over each table object in the pageData array and generate a summary and title for each table section using the LLM
@@ -62,18 +98,15 @@ async function handler(req: Request) {
             // Generate a markdown table describing the cells in the table
             const tableMarkdownArray = tableMarkdownTableGenerator(markdownHeaders, table.cells, tablePrompt);
 
-            // Loop over table sections and generate a summary for each
+            // Loop over table sections and call the LLM chain for each section
             for (let j = 0; j < tableMarkdownArray.length; j++) {
-                const tableSectionPrompt = tableSummaryTemplate(tablePrompt, j);
-
-                // Create LLM Chain
-                const llmChain = new LLMChain({
-                    llm: model,
-                    prompt: tableSectionPrompt,
-                });
-
                 // Add LLM Chain Run to Promises Array
-                tablePromises.push(llmChain.call({markdownTable: tableMarkdownArray[j]}));
+                tablePromises.push(llmChain.call({
+                    sectionNumber: j,
+                    tablePrompt: tablePrompt,
+                    markdownTable: tableMarkdownArray[j],
+                    dataElementsTable: dataElementsMarkdown,
+                }));
             }
 
             // Retrieve the LLM summarization results
@@ -81,71 +114,109 @@ async function handler(req: Request) {
 
             // loop over the table sections, embed the summary and write to the database
             for (let j = 0; j < tableSections.length; j++) {
-                const tableSectionText = tableSections[j].text;
-                console.log(`Page ${pageNumber} Table ${i} Section ${j}\nOutput:\n${tableSectionText}`);
+                console.log(`Table Page ${pageNumber} Table ${i} Section ${j}`);
+                console.log(tableSections[j]);
+                const relevant = tableSections[j].text.relevant;
+                const reason = tableSections[j].text.reason;
+                const elements = tableSections[j].text.elements;
 
-                // Generate embedding for the table section verdict
-                const embeddingUrl = "https://api.openai.com/v1/embeddings";
-                const embeddingHeaders = {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${openai_api_key}`
-                };
+                if (relevant) {
+                    // Generate embedding for the table section verdict
+                    const embeddingUrl = "https://api.openai.com/v1/embeddings";
+                    const embeddingHeaders = {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${openai_api_key}`
+                    };
 
-                const embeddingBody = JSON.stringify({
-                    "input": tableSectionText,
-                    "model": "text-embedding-ada-002",
-                });
-
-                // loop until the embedding is generated
-                // if embeddingJson.data is undefined, then the embedding is not ready
-                let calculateEmbedding = true;
-                let sectionEmbedding;
-                while (calculateEmbedding) {
-                    const embeddingResponse = await fetch(embeddingUrl, {
-                        method: "POST",
-                        headers: embeddingHeaders,
-                        body: embeddingBody
+                    const reasonEmbeddingBody = JSON.stringify({
+                        "input": reason,
+                        "model": "text-embedding-ada-002",
                     });
-                    const embeddingJson = await embeddingResponse.json();
-                    if (embeddingJson.data) {
-                        sectionEmbedding = embeddingJson.data[0].embedding;
-                        calculateEmbedding = false;
-                    } else {
-                        console.log("Embedding not ready yet, waiting 1 second...");
-                        console.log(embeddingResponse.status, embeddingResponse.statusText);
-                        await new Promise(r => setTimeout(r, 1000));
+
+                    // loop until the embedding is generated
+                    // if embeddingJson.data is undefined, then the embedding is not ready
+                    let calculateEmbedding = true;
+                    let reasonEmbedding;
+                    while (calculateEmbedding) {
+                        const embeddingResponse = await fetch(embeddingUrl, {
+                            method: "POST",
+                            headers: embeddingHeaders,
+                            body: reasonEmbeddingBody
+                        });
+                        const embeddingJson = await embeddingResponse.json();
+                        if (embeddingJson.data) {
+                            reasonEmbedding = embeddingJson.data[0].embedding;
+                            calculateEmbedding = false;
+                        } else {
+                            console.log("Embedding not ready yet, waiting 1 second...");
+                            console.log(embeddingResponse.status, embeddingResponse.statusText);
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
                     }
+        
+                    summaryInsertRows.push({
+                        "letter_id": letterId,
+                        "page_number": pageNumber,
+                        "section_type": "table",
+                        "section_number": i,
+                        "sub_section_number": j,
+                        "reason": reason,
+                        "section_embedding": reasonEmbedding,
+                        "left": table.left,
+                        "top": table.top,
+                        "right": table.right,
+                        "bottom": table.bottom,
+                    });
                 }
 
-                // Generate the validity and reason for the page section summary
-                const valid = tableSectionText.split("VALID:")[1].split("REASON:")[0].trim().toLowerCase() === "yes";
-                const reason = tableSectionText.split("REASON:")[1].trim();
-    
-                insertRows.push({
-                    "letter_id": letterId,
-                    "page_number": pageNumber,
-                    "section_type": "table",
-                    "section_number": i,
-                    "sub_section_number": j,
-                    "valid": valid,
-                    "reason": reason,
-                    "section_embedding": sectionEmbedding,
-                    "left": table.left,
-                    "top": table.top,
-                    "right": table.right,
-                    "bottom": table.bottom,
-                });
+                if (elements) {
+                    for (let e = 0; e < elements.length; e++) {
+                        const fieldId = elements[e].id;
+                        const field = elements[e].field;
+                        const summary = elements[e].summary;
+                        const value = elements[e].value;
+
+                        dataElementInsertRows.push({
+                            "document_type": "denial_letter",
+                            "document_id": letterId,
+                            "page_number": pageNumber,
+                            "section_type": "table",
+                            "section_number": i,
+                            "sub_section_number": j,
+                            "field_id": fieldId,
+                            "field_name": field,
+                            "field_value": value,
+                            "field_summary": summary,
+                            "left": table.left,
+                            "top": table.top,
+                            "right": table.right,
+                            "bottom": table.bottom,
+                        });
+                    }
+                }
             }
         }
+
+        // Filter out data elements that contain "None", "N/A", or "" as the value
+        const filteredDataElementInsertRows = dataElementInsertRows.filter((element: any) => {
+            return element.field_value !== "None" && element.field_value !== "N/A" && element.field_value !== "";
+        });
 
         // Write the table summaries to the database
         const { data, error } = await supabaseClient
             .from("letter_sections")
-            .insert(insertRows)
+            .insert(summaryInsertRows)
             .select();
-
         if (error) {
             throw new Error(error.message);
+        }
+
+        // Write the page data elements to the database
+        const { error: dataElementError } = await supabaseClient
+            .from("document_data_elements")
+            .insert(filteredDataElementInsertRows)
+        if (dataElementError) {
+            throw new Error(dataElementError.message);
         }
 
         // Return 200 response with the page summary data

@@ -9,16 +9,17 @@ export const commonDataElementsMarkdown = async (docType: string[] | undefined) 
 
     const { data: dataElementsTable, error: dataElementsTableError } = await supabaseClient
         .from('common_data_elements')
-        .select('field, medical_terms, description, additional_llm_instructions')
+        .select('id, field, medical_terms, description, additional_llm_instructions')
         .in('document_type',docTypeArray);
     if (dataElementsTableError) {
         throw new Error(dataElementsTableError.message);
     }
 
     // Create a markdown table from the data element schema
-    const markdownHeaders = ["Field", "Medical Terms", "Description", "Additional LLM Instructions"];
+    const markdownHeaders = ["ID, Field", "Medical Terms", "Description", "Additional LLM Instructions"];
     const markdownArray = dataElementsTable.map((element: any) => {
         return [
+            element.id ? element.id : "",
             element.field ? element.field : "",
             element.medical_terms ? element.medical_terms : "",
             element.description ? element.description : "",
