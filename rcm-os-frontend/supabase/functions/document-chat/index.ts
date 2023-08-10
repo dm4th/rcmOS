@@ -80,13 +80,14 @@ async function handler(req: Request) {
             { 
                 embedding: promptEmbedding,
                 record_id: record_id,
-                match_threshold: 0.70,
-                match_count: 10,
+                match_threshold: 0.60,
+                match_count: 3,
             });
         if (matchError) {
             console.error(matchError);
             throw new Error("Failed to match prompt embedding");
         }
+        console.log(matchData);
 
         interface Citation {
             type: string;
@@ -99,8 +100,11 @@ async function handler(req: Request) {
             bottom: number;
             similarity: number;
         }
-        const citationMaxSimilarity = matchData[0].similarity;
-        const citations = matchData.filter((c: Citation) => c.similarity >= citationMaxSimilarity- 0.02);
+        let citations: Citation[] = [];
+        if (matchData.length > 0) {
+            const citationMaxSimilarity = matchData[0].similarity;
+            citations = matchData.filter((c: Citation) => c.similarity >= citationMaxSimilarity- 0.02);
+        }
         console.log(citations);
 
         // retrieve chat history

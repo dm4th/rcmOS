@@ -167,6 +167,12 @@ export const handleTextSummarySupabase = async (blocks, recordId, inputTemplate,
             return newState;
         });
     }
+
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].progress = 100;
+        return newState;
+    });
 };
 
 export const handleTableSummarySupabase = async (blocks, recordId, inputTemplate, supabaseClient, stage, setUploadStage) => {
@@ -233,6 +239,12 @@ export const handleTableSummarySupabase = async (blocks, recordId, inputTemplate
             return newState;
         });
     }
+
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].progress = 100;
+        return newState;
+    });
 };
 
 export const handleKvSummarySupabase = async (blocks, recordId, inputTemplate, supabaseClient, stage, setUploadStage) => {
@@ -298,4 +310,10 @@ export const handleKvSummarySupabase = async (blocks, recordId, inputTemplate, s
             return newState;
         });
     }
+
+    setUploadStage((prevState) => {
+        const newState = [...prevState];
+        newState[stage].progress = 100;
+        return newState;
+    });
 };

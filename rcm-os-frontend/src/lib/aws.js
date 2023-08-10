@@ -20,7 +20,7 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
     }
     
     // Request Pre-Signed URL from API Gateway
-    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL, {
+    const urlRes = await axios.post(process.env.NEXT_PUBLIC_AWS_UPLOAD_FUNCTION_URL + 'record', {
         fileName: file.name,
     });
     const url = JSON.parse(urlRes.data.body).url;
@@ -47,9 +47,9 @@ export const uploadFileAWS = async (file, stage, setUploadStage) => {
     }
 
     // Kick off Textract Processing
-    const textractRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+    const textractRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
         S3Object: {
-            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET,
+            Bucket: process.env.NEXT_PUBLIC_S3_BUCKET + 'records',
             Name: file.name,
         },
     });
@@ -91,7 +91,7 @@ const pollJobAWS = async (jobId, stage, setUploadStage) => {
             setTimeout(resolve, 2000);
         });
 
-        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+        statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
             JobId: jobId,
         });
         jobStatus = JSON.parse(statusRes.data.body).JobStatus;
@@ -152,12 +152,12 @@ const getResultsAWS = async (jobId, stage, setUploadStage) => {
         let jobRes;
         if (first) {
             first = false;
-            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
                 JobId: jobId,
             });
             totalPages = JSON.parse(jobRes.data.body).Metadata.Pages * 3.0; // Need to do each page three times
         } else {
-            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_TEXTRACT_FUNCTION_URL, {
+            jobRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {
                 JobId: jobId,
                 NextToken: nextToken,
             });

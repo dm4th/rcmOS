@@ -10,7 +10,7 @@ export function Intro({ handleFileChange, handleFileDrop, handleTestingButtonCli
     ) : user ? (
         <div>
             <p className="mt-3 text-2xl text-gray-900 dark:text-white">
-                Upload a medical record to get started.
+                Upload a PDF to get started.
             </p>
             <div className="flex items-center justify-center mt-6">
                 <label 
@@ -21,7 +21,7 @@ export function Intro({ handleFileChange, handleFileDrop, handleTestingButtonCli
                     <svg className="w-8 h-8" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                         <path d="M17 10h-4V0H7v10H3l7 7 7-7z" />
                     </svg>
-                    <span className="mt-2 text-base leading-normal">Upload Record</span>
+                    <span className="mt-2 text-base leading-normal">Upload Document</span>
                     <input type='file' className="hidden" onChange={handleFileChange} />
                 </label>
             </div>
@@ -43,7 +43,7 @@ export function Intro({ handleFileChange, handleFileDrop, handleTestingButtonCli
     return (
         <div>
             <h1 className="text-6xl font-bold text-gray-900 dark:text-white">
-                Welcome to rcmOS
+                Welcome to DocWow
             </h1>
 
             {content}
