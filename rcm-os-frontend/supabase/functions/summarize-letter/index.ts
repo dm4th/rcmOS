@@ -40,7 +40,6 @@ async function handler(req: Request) {
         const model = new OpenAI({
             openAIApiKey: openai_api_key,
             temperature: 0.1,
-            maxTokens: 200,
             frequencyPenalty: 0,
             presencePenalty: 0,
             modelName: "gpt-3.5-turbo",

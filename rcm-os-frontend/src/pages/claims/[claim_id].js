@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import React from 'react';
+import { useRouter } from 'next/router';
 
 import { CSSTransition } from 'react-transition-group';
 
@@ -27,9 +28,20 @@ const supabaseProcessingStages = [
     { stage: 'Generating Key-Value Summaries & Embeddings', progress: 0, max: 100, active: false },
 ];
 
-export default function Home() {
+export function getServersideProps(context) {
+    const { claim_id } = context.query;
+    return {
+        props: {
+            claim_id,
+        },
+    };
+}
 
-    const { user, supabaseClient, availableDocuments, doc, changeDoc, chat, changeChat } = useSupaUser();
+export default function ClaimPage(props) {
+    const router = useRouter();
+    const { claim_id } = router.query;
+
+    const { user, supabaseClient } = useSupaUser();
 
     const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
     const [transitioningState, setTransitioningState] = useState(false);

@@ -155,6 +155,7 @@ CREATE TABLE "public"."letter_sections" (
     "section_type" "text" NOT NULL,
     "section_number" "int4" NOT NULL,
     "sub_section_number" "int4",
+    "valid" "bool" NOT NULL DEFAULT FALSE,
     "reason" "text" NOT NULL,
     "section_embedding" "public"."vector" NOT NULL,
     "left" "float4" NOT NULL,

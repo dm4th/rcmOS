@@ -70,7 +70,9 @@ export const textSectionTemplate = ((outputFixingParser: Any) => {
         "4. Additional LLM Instructions: Additional Instructions for you to observe when you summarize your findings regarding this element.\n" +
         "\nBelow is the data for the common medical data elements:\n\n" +
         "{dataElementsTable}" +
-        `\n\nGiven the above information about the text retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this text?` + 
+        `\n\nGiven the above information about the text retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this text?\n` +
+        'Remember that adjacent and nearby text can be used to help determine the meaning of the text you are looking at. Please feel free to cite other records in the data markdown table above as you search for denial reasons and common data elements.\n' +
+        'It is more important to return common data elements than exclude them, so please err on the side of returning data elements if you are unsure. Simply indicate your certainty in your confidence score for that match. Please use the full range of 0-1 when letting me know how confident you are in your match.\n\n' +
         "{formatInstructions}",
         inputVariables: ['pageNumber', 'sectionNumber', 'markdownTable', 'dataElementsTable'],
         partialVariables: {
@@ -106,59 +108,15 @@ export const tableSectionTemplate = ((outputFixingParser: Any) => {
         "4. Additional LLM Instructions: Additional Instructions for you to observe when you summarize your findings regarding this element.\n" +
         "\nBelow is the data for the common medical data elements:\n\n" +
         "{dataElementsTable}" +
-        `\n\nGiven the above information about the tablualr information retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this table?` + 
+        `\n\nGiven the above information about the tablualr information retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this table?\n` +
+        'Remember that adjacent and nearby text can be used to help determine the meaning of the data you are looking at. Please feel free to cite other records in the data markdown table above as you search for denial reasons and common data elements.\n' +
+        'It is more important to return common data elements than exclude them, so please err on the side of returning data elements if you are unsure. Simply indicate your certainty in your confidence score for that match. Please use the full range of 0-1 when letting me know how confident you are in your match.\n\n' + 
         "{formatInstructions}",
         inputVariables: ['sectionNumber', 'tablePrompt', 'markdownTable', 'dataElementsTable'],
         partialVariables: {
             formatInstructions: outputFixingParser.getFormatInstructions()
         }
     });
-});
-
-
-export const kvSummaryTemplate = ((pageNumber: string | number, sectionNumber: number) => {
-
-    let pageSection: string; 
-    switch (sectionNumber) {
-        case 0:
-            pageSection = "top";
-            break;
-        case 1:
-            pageSection = "middle";
-            break;
-        case 2:
-            pageSection = "bottom";
-            break;
-        default:
-            pageSection = "unknown";
-    };
-
-    const pageDesc = `the ${pageSection} part of page ${pageNumber}`;
-
-
-
-    return PromptTemplate.fromTemplate(
-        `You are a Medical Documentation Specialist tasked with analyzing an insurance claim denial letter.\n` +
-        `The primary goal of your analysis is to determine the reason why the insurance claim was denied.\n` +
-        `Below is a markdown formatted table of key value pairs in a form pulled from ${pageDesc} of an insurance claim denial letter using machine learning / OCR. The table contains the following columns:\n` +
-        "1. Key: The key of the key value pair\n" +
-        "2. Value: The value of the key value pair\n" +
-        "3. Confidence: A percentage with 100% being very confident that the text pulled from the document is correct. Anything below 50% should be viewed very cautiously.\n" +
-        "4. Left: A percentage representing how far left on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
-        "5. Top: A percentage representing how far up on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
-        "6. Right: A percentage representing how far right on the page the text appears. 0% is the very left of the page, 100% is all the way to the right.\n" +
-        "7. Bottom: A percentage representing how far down on the page the text appears. 0% is the very top of the page, 100% is all the way on the bottom.\n" +
-        "\nBelow is the markdown table describing the key-value pair data on this part of the page:\n\n" +
-        "{markdownTable}" +
-        `\n\nGiven the above information about the values retrieved from the insurance claim denial letter, can you determine why the insurance claim was denied?\n` +
-        `If you cannot determine a medical reason for the denial, simply respond in the following format:` +
-        "VALID: <Yes/No>\n" +
-        "REASON: <explanation for why you cannot determine the medical cause for the insurance claim denial>\n" +
-        "Otherwise please respond in the following format and only in the following format. Do not add any extra text other than responding in this way:\n" +
-        "VALID: <Yes/No>\n" +
-        "REASON: <medical explanation of why the insurance claim was denied, citing specific evidence for your claim>" +
-        "Please only respond with VALID = Yes if you can determine the medical cause of the denial with a high degree of confidence. If you are not confident in your answer, please respond with VALID = No."
-    );
 });
 
 export const kvSectionTemplate = ((outputFixingParser: Any) => {
@@ -186,7 +144,9 @@ export const kvSectionTemplate = ((outputFixingParser: Any) => {
         "4. Additional LLM Instructions: Additional Instructions for you to observe when you summarize your findings regarding this element.\n" +
         "\nBelow is the data for the common medical data elements:\n\n" +
         "{dataElementsTable}" +
-        `\n\nGiven the above information about the key-value pairs retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this text?` + 
+        `\n\nGiven the above information about the key-value pairs retrieved from the denial letter and common data elements to search for, can you determine why the claim was denied and/or find any elements in this text?\n` + 
+        'Remember that adjacent and nearby text can be used to help determine the meaning of the text you are looking at. Please feel free to cite other records in the data markdown table above as you search for denial reasons and common data elements.\n' +
+        'It is more important to return common data elements than exclude them, so please err on the side of returning data elements if you are unsure. Simply indicate your certainty in your confidence score for that match. Please use the full range of 0-1 when letting me know how confident you are in your match.\n\n' +
         "{formatInstructions}",
         inputVariables: ['pageDesc', 'markdownTable', 'dataElementsTable'],
         partialVariables: {

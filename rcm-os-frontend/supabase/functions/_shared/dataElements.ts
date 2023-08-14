@@ -16,7 +16,7 @@ export const commonDataElementsMarkdown = async (docType: string[] | undefined) 
     }
 
     // Create a markdown table from the data element schema
-    const markdownHeaders = ["ID, Field", "Medical Terms", "Description", "Additional LLM Instructions"];
+    const markdownHeaders = ["ID", "Field", "Medical Terms", "Description", "Additional LLM Instructions"];
     const markdownArray = dataElementsTable.map((element: any) => {
         return [
             element.id ? element.id : "",

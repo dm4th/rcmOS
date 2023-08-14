@@ -53,8 +53,7 @@ async function handler(req: Request) {
         const { data: claimDenialReasons, error: claimDenialReasonsError } = await supabaseClient
             .from('letter_sections')
             .select('reason')
-            .eq('letter_id', letterId)
-            .is('valid', true);
+            .eq('letter_id', letterId);
         if (claimDenialReasonsError) {
           throw new Error(claimDenialReasonsError.message);
         }

@@ -46,14 +46,19 @@ async function handler(req: Request) {
 
         // Create Zod schema for LangChain Function
         const outputSchema = z.object({
-            relevant: z.boolean().describe('Only true if the information in the table is relevant to the MEDICAL reason for the claim denial. Defer to false if not 100% certain of the medical reasoning. The reason must be medical and not administrative.'),
-            reason: z.string().describe('A summary of the MEDICAL reason for the claim denial (or just "None" if the information in the table is not relevant to the medical reason for the claim denial)'),
+            relevant: z.boolean().describe('Only true if the section of text is relevant to the MEDICAL reason for the claim denial. Defer to false if not 100% certain of the medical reasoning. The reason must be medical and not administrative.'),
+            reason: z.string().describe('A summary of the MEDICAL reason for the claim denial (or just "None" if the section of text is not relevant to the medical reason for the claim denial)'),
             elements: z.array(z.object({
                 id: z.string().describe('The ID of the data element you have found a value for in the processed text.'),
-                field: z.string().describe('The field of the data element matching the exact text in the common data elements table'),
-                summary: z.string().describe('A summary of the data element matching the exact text in the common data elements table and why it matches'),
-                value: z.string().describe('The value of the data element that caused you to believe there was a match to a common data element. Be sure to provide your output in the output specified in the "Additional LLM Instructions" column of the common data elements table if available. If you cannot provide your value in the specified format, your return value should be "N/A".'),
-            })).optional().describe('An array of data elements found in the table that match a field in the common data elements table. If no data elements are found, this field will not be present.'),
+                field: z.string().describe('The field of the data element matching the text in the field column of the common data elements table. Any data that you believe matches a common data element should be included in the output.'),
+                summary: z.string().describe('A step-by-step reasoning of why this data element matches the field in the common data elements table, even if your confidence in your answer is low. Please be sure to cite the common data elements description field to help you with this.'),
+                value: z.string().describe('The value of the data element that caused you to believe there was a match to a common data element. Be sure to provide your output in the output specified in the "Additional LLM Instructions" column of the common data elements table if available. If no value is present in "Additional LLM Instructions" feel free to format as you found the output in the data table. If you cannot provide your value in a specified format, your return value should be "N/A".'),
+                confidence: z.number().min(0).max(1).describe('A number between 0 and 1 representing the confidence you have that this particular piece of data fits the described data element. Low confidence scores are welcome, the gaol is to find all the data elements in the denial letter.'),
+                left: z.number().min(0).max(1).describe('The left coordinate value from the record you wish to cite for the common data element match.'),
+                top: z.number().min(0).max(1).describe('The top coordinate value from the record you wish to cite for the common data element match.'),
+                width: z.number().min(0).max(1).describe('The width coordinate value from the record you wish to cite for the common data element match.'),
+                height: z.number().min(0).max(1).describe('The height coordinate value from the record you wish to cite for the common data element match.'),
+            })).optional().describe('An array of data elements found in the section of text that match a field in the common data elements table. If no data elements are found, this field will not be present. Data present in the denial letter can pertain to multiple common data elements.'),
         });
         const outputParser = StructuredOutputParser.fromZodSchema(outputSchema);
 
@@ -171,11 +176,6 @@ async function handler(req: Request) {
 
                 if (elements) {
                     for (let e = 0; e < elements.length; e++) {
-                        const fieldId = elements[e].id;
-                        const field = elements[e].field;
-                        const summary = elements[e].summary;
-                        const value = elements[e].value;
-
                         dataElementInsertRows.push({
                             "document_type": "denial_letter",
                             "document_id": letterId,
@@ -183,14 +183,15 @@ async function handler(req: Request) {
                             "section_type": "table",
                             "section_number": i,
                             "sub_section_number": j,
-                            "field_id": fieldId,
-                            "field_name": field,
-                            "field_value": value,
-                            "field_summary": summary,
-                            "left": table.left,
-                            "top": table.top,
-                            "right": table.right,
-                            "bottom": table.bottom,
+                            "field_id": elements[e].id,
+                            "field_name": elements[e].field,
+                            "field_value": elements[e].value,
+                            "field_summary": elements[e].summary,
+                            "confidence": elements[e].confidence,
+                            "left": elements[e].left,
+                            "top": elements[e].top,
+                            "right": elements[e].width + elements[e].left,
+                            "bottom": elements[e].height + elements[e].top,
                         });
                     }
                 }
