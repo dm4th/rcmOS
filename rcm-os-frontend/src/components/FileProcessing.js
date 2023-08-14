@@ -1,4 +1,4 @@
-export function ClaimProcessing({ progressTitle, progressValues }) {
+export function FileProcessing({ progressTitle, progressValues }) {
     // Component to render the progress of the claim processing with multiple stages
     // progressTitle: string
     // progressValues: array of progress values for each stage

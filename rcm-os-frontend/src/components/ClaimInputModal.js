@@ -4,7 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 // Component Imports
 import { CSSTransition } from 'react-transition-group';
 import { ClaimInput } from '@/components/claims/ClaimInput';
-import { ClaimProcessing } from '@/components/claims/ClaimProcessing';
+import { FileProcessing } from '@/components/FileProcessing';
 import { DenialSummary } from '@/components/claims/DenialSummary';
 import { ClaimRoute } from '@/components/claims/ClaimRoute';
 
@@ -269,7 +269,7 @@ export function ClaimInputModal({ onClose }) {
                     classNames="fade"
                     unmountOnExit={true}
                 >
-                    <ClaimProcessing progressTitle={progressTitle} progressValues={progressValues} />
+                    <FileProcessing progressTitle={progressTitle} progressValues={progressValues} />
                 </CSSTransition>
                 <CSSTransition
                     in={modalStage === 'denialSummary' && !transitioningState}

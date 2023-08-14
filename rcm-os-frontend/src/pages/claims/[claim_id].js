@@ -12,187 +12,61 @@ import { InputTemplateModal } from '@/components/InputTemplateModal';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
-import { uploadFileAWS, textractOCR } from '@/lib/aws';
-import { createFileSupabase, handleTextSummarySupabase, handleTableSummarySupabase, handleKvSummarySupabase } from '@/lib/supabase';
-
-const awsProcessingStages = [
-    { stage: 'Uploading Document to AWS S3', progress: 0, max: 100, active: true },
-    { stage: 'Processing Document with AWS Textract', progress: 0, max: 100, active: false },
-    { stage: 'Retrieving Textract Analysis Results', progress: 0, max: 100, active: false },
-];
-
-const supabaseProcessingStages = [
-    { stage: 'Uploading Document to SupaBase Storage', progress: 0, max: 100, active: false },
-    { stage: 'Generating Text Summaries & Embeddings', progress: 0, max: 100, active: false },
-    { stage: 'Generating Table Summaries & Embeddings', progress: 0, max: 100, active: false },
-    { stage: 'Generating Key-Value Summaries & Embeddings', progress: 0, max: 100, active: false },
-];
-
-export function getServersideProps(context) {
-    const { claim_id } = context.query;
+export function getServerSideProps(context) {
+    const claim_id = context.params.claim_id;
     return {
         props: {
-            claim_id,
+            claimId: claim_id,
         },
     };
 }
 
-export default function ClaimPage(props) {
+export default function ClaimPage({ claimId }) {
     const router = useRouter();
-    const { claim_id } = router.query;
 
     const { user, supabaseClient } = useSupaUser();
 
-    const [appStage, setAppStage] = useState('intro'); // ['intro', 'processing', 'chat']
+    // UI State Variables
+    const [appStage, setAppStage] = useState('base'); // ['base', 'uploading', 'processing', 'generating'
     const [transitioningState, setTransitioningState] = useState(false);
-
-    const [file, setFile] = useState(null);
-    const [jobId, setJobId] = useState(null);
-    const [recordId, setRecordId] = useState(null);
-
-    const [textBlocks, setTextBlocks] = useState(null);
-    const [tableBlocks, setTableBlocks] = useState(null);
-    const [kvBlocks, setKvBlocks] = useState(null);
-
     const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-
     const [inputModalOpen, setInputModalOpen] = useState(false);
-    const [inputTemplate, setInputTemplate] = useState(null);
 
-    const [uploadStageAWS, setUploadStageAWS] = useState(awsProcessingStages);
-    const [uploadStageSupabase, setUploadStageSupabase] = useState(supabaseProcessingStages);
+    // Claim State Variables
+    const [claimTitle, setClaimTitle] = useState(null);
+    const [claimStatus, setClaimStatus] = useState(null);
 
-    useEffect(() => {
-        if (appStage !== 'processing') {
-            // reset all states
-            setUploadStageAWS(awsProcessingStages);
-            setUploadStageSupabase(supabaseProcessingStages);
-            setFile(null);
-            setJobId(null);
-            setRecordId(null);
-            setTextBlocks(null);
-            setTableBlocks(null);
-            setKvBlocks(null);
-            setInputTemplate(null);  
-        }
-
-        if (appStage === 'chat' && !doc) {
-            changeDoc(availableDocuments[0]);
-        }
-    }, [appStage]);
+    // Uploading & Processing New Files State Variables
+    const [progressValues, setProgressValues] = useState(null);
+    const [progressTitle, setProgressTitle] = useState('');
 
     useEffect(() => {
-        if (!user) {
-            changeAppState('intro');
-        }
-    }, [user]);
-
-    useEffect(() => {
-        if (chat) {
-            changeAppState('chat');
-        }
-    }, [chat]);
-
-    useEffect(() => {
-        if (file) {
-            changeAppState('processing');
-            uploadFileAWS(file, 0, setUploadStageAWS).then((jobId) => {
-                setJobId(jobId);
-            });
-        }
-    }, [file]);
-
-    useEffect(() => {
-        if (jobId && !inputTemplate) {
-            toggleInputModal();
-            textractOCR(jobId, 1, 2, setUploadStageAWS).then((ocrResult) => {
-                if (!ocrResult) {
-                    alert('AWS Error');
-                }
-                setTextBlocks(ocrResult.textBlocks);
-                setTableBlocks(ocrResult.tableBlocks);
-                setKvBlocks(ocrResult.kvBlocks);
-            });
-        }
-    }, [jobId]);
-
-    useEffect(() => {
-        if (jobId && inputTemplate) {
-            createFileSupabase(jobId, file, inputTemplate.id, user, supabaseClient, 0, setUploadStageSupabase).then((recordId) => {
-                setRecordId(recordId);
-            });
-        }
-    }, [inputTemplate, jobId]);
-
-    useEffect(() => {
-        if (recordId && textBlocks) {
-            setUploadStageSupabase((prevState) => {
-                const newState = [...prevState];
-                newState[1].active=true;
-                return newState;
-            });
-            handleTextSummarySupabase(textBlocks, recordId, inputTemplate, supabaseClient, 1, setUploadStageSupabase);
-        }
-    }, [recordId, textBlocks]);
-
-    useEffect(() => {
-        if (recordId && tableBlocks) {
-            setUploadStageSupabase((prevState) => {
-                const newState = [...prevState];
-                newState[2].active=true;
-                return newState;
-            });
-            handleTableSummarySupabase(tableBlocks, recordId, inputTemplate, supabaseClient, 2, setUploadStageSupabase);
-        }
-    }, [recordId, tableBlocks]);
-
-    useEffect(() => {
-        if (recordId && kvBlocks) {
-            setUploadStageSupabase((prevState) => {
-                const newState = [...prevState];
-                newState[3].active=true;
-                return newState;
-            });
-            handleKvSummarySupabase(kvBlocks, recordId, inputTemplate, supabaseClient, 3, setUploadStageSupabase);
-        }
-    }, [recordId, kvBlocks]);
-
-    useEffect(() => {
-        const createNewChat = async (id) => {
-            // update medical record content_embedding_progress to 100
-            const { data: progressData, error: progressError } = await supabaseClient
-                .from('medical_records')
-                .update({ content_embedding_progress: 100 })
-                .eq('id', id)
-                .select();
-            if (progressError) {
-                console.error(progressError);
+        console.log(`Claim ID: ${claimId}`);
+        async function checkClaimAuthorization() {
+            if (!claimId) return;
+            if (!user) {
+                router.push('/');
                 return;
             }
-            await changeDoc(progressData[0].id);
-
-            // create a new chat record for the document
-            const { data: chatData, error: chatError } = await supabaseClient
-                .from('document_chats')
-                .insert([{ 
-                    record_id: recordId,
-                    user_id: user.id,
-                    title: 'Initial Chat',
-                }])
-                .select();
-            if (chatError) {
-                console.error(chatError);
-                return;
+            const { data, error } = await supabaseClient
+                .from('claims')
+                .select('*')
+                .eq('id', claimId)
+                .single();
+        
+            if (error) {
+                console.error(error);
+                router.push('/unauthorized');
             }
-            await changeChat(chatData[0].id);
-        };
-
-
-        if (uploadStageSupabase[1].progress === 100 && uploadStageSupabase[2].progress === 100 && uploadStageSupabase[3].progress === 100) {
-            createNewChat(recordId);    
-            changeAppState('chat');     
+            if (data.length === 0) {
+                router.push('/unauthorized');
+            }
+            setClaimTitle(data.title);
+            setClaimStatus(data.status);
+            return;
         }
-    }, [uploadStageSupabase]);
+        checkClaimAuthorization();
+    }, [user, claimId]);
 
     const changeAppState = (newState) => {
         setTransitioningState(true);
@@ -206,37 +80,8 @@ export default function ClaimPage(props) {
         setIsSidebarVisible(!isSidebarVisible);
     };
 
-    const processFileAsync = async () => {
-        changeAppState('processing');
-        uploadFileAWS(null, 0, setUploadStageAWS).then((jobId) => {
-            setJobId(jobId);
-        });
-    };
-
-    const handleFileChange = (e) => {
-        const file = e.target.files[0];
-        changeAppState('processing');
-        setFile(file);
-    };
-
-    const handleFileDrop = (e) => {
-        e.preventDefault();
-        const file = e.dataTransfer.files[0];
-        changeAppState('processing');
-        setFile(file);
-    };
-
-    const handleTestingButtonClick = () => {
-        changeAppState('processing');
-        processFileAsync(null);
-    };
-
     const toggleInputModal = () => {
         setInputModalOpen(!inputModalOpen);
-    };
-
-    const handleInputTemplateSelect = (template) => {
-        setInputTemplate(template);
     };
 
     const ArrowLeft = () => (
@@ -251,8 +96,6 @@ export default function ClaimPage(props) {
         </svg>
     );
     
-
-
     return (
         <div className="flex h-full bg-white dark:bg-gray-900">
             <CSSTransition
@@ -270,28 +113,15 @@ export default function ClaimPage(props) {
             </button>
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center overflow-auto">
                     <CSSTransition
-                        in={appStage === 'intro' && !transitioningState}
+                        in={appStage === 'base' && !transitioningState}
                         timeout={300}
                         classNames="fade"
                         unmountOnExit={true}
                     >
-                        <Intro handleFileChange={handleFileChange} handleFileDrop={handleFileDrop} handleTestingButtonClick={handleTestingButtonClick} />
-                    </CSSTransition>
-                    <CSSTransition
-                        in={appStage === 'processing' && !transitioningState}
-                        timeout={300}
-                        classNames="fade"
-                        unmountOnExit={true}
-                    >
-                        <Processing uploadStageAWS={uploadStageAWS} uploadStageSupabase={uploadStageSupabase} />
-                    </CSSTransition>
-                    <CSSTransition
-                        in={appStage === 'chat' && !transitioningState}
-                        timeout={300}
-                        classNames="fade"
-                        unmountOnExit={true}
-                    >
-                        <ChatInterface />
+                        <div className="flex flex-col items-center justify-center w-full h-full">
+                            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">{claimTitle}</h1>
+                            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{claimStatus}</p>
+                        </div>
                     </CSSTransition>
             </main>
             {inputModalOpen && <InputTemplateModal onClose={toggleInputModal} onTemplateSelect={handleInputTemplateSelect} />}
