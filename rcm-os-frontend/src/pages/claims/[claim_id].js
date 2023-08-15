@@ -35,6 +35,8 @@ export default function ClaimPage({ claimId }) {
     // Claim State Variables
     const [claimTitle, setClaimTitle] = useState(null);
     const [claimStatus, setClaimStatus] = useState(null);
+    const [claimSummary, setClaimSummary] = useState(null);
+    const [claimDocuments, setClaimDocuments] = useState(null);
 
     // Uploading & Processing New Files State Variables
     const [progressValues, setProgressValues] = useState(null);
@@ -42,6 +44,7 @@ export default function ClaimPage({ claimId }) {
 
     useEffect(() => {
         console.log(`Claim ID: ${claimId}`);
+
         async function checkClaimAuthorization() {
             if (!claimId) return;
             if (!user) {
@@ -65,7 +68,29 @@ export default function ClaimPage({ claimId }) {
             setClaimStatus(data.status);
             return;
         }
+
+        async function getClaimDocuments(templateId) {
+            const { data, error } = await supabaseClient
+                .from('claim_document_view')
+                .select('document_id, document_type, file_name, summary')
+                .eq('claim_id', claimId);
+
+            if (error) {
+                console.error(error);
+                return;
+            }
+            const documents = {
+                denialLetters: data.filter(doc => doc.document_type === 'denial_letter'),
+                medicalRecords: data.filter(doc => doc.document_type === 'medical_record'),
+                otherDocuments: data.filter(doc => doc.document_type === 'other_document'),
+            }
+            setClaimDocuments(documents);
+            setClaimSummary(documents.denialLetters[0].summary);
+            return;
+        }
+
         checkClaimAuthorization();
+        getClaimDocuments();
     }, [user, claimId]);
 
     const changeAppState = (newState) => {
@@ -120,7 +145,8 @@ export default function ClaimPage({ claimId }) {
                     >
                         <div className="flex flex-col items-center justify-center w-full h-full">
                             <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">{claimTitle}</h1>
-                            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">{claimStatus}</p>
+                            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">Status: {claimStatus}</p>
+                            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">Denial Summary: {claimSummary}</p>
                         </div>
                     </CSSTransition>
             </main>
