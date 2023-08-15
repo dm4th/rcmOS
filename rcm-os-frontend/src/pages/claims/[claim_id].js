@@ -37,6 +37,7 @@ export default function ClaimPage({ claimId }) {
     const [claimStatus, setClaimStatus] = useState(null);
     const [claimSummary, setClaimSummary] = useState(null);
     const [claimDocuments, setClaimDocuments] = useState(null);
+    const [claimDataElements, setClaimDataElements] = useState(null);
 
     // Uploading & Processing New Files State Variables
     const [progressValues, setProgressValues] = useState(null);
@@ -69,7 +70,7 @@ export default function ClaimPage({ claimId }) {
             return;
         }
 
-        async function getClaimDocuments(templateId) {
+        async function getClaimDocuments() {
             const { data, error } = await supabaseClient
                 .from('claim_document_view')
                 .select('document_id, document_type, file_name, summary')
@@ -89,8 +90,48 @@ export default function ClaimPage({ claimId }) {
             return;
         }
 
+        async function getClaimDataElements() {
+            const { data: documentData, error: documentError } = await supabaseClient
+                .from('claim_document_view')
+                .select('document_id')
+                .eq('claim_id', claimId);
+
+            if (documentError) {
+                console.error(documentError);
+                return;
+            }
+
+            // dedupe document ids
+            const documentIds = [...new Set(documentData.map(doc => doc.document_id))];
+
+            const { data: dataElementData, error: dataElementError } = await supabaseClient
+                .from('document_data_elements')
+                .select('id, document_id, field_id, field_name, field_value, confidence')
+                .in('document_id', documentIds)
+                .order('field_name', { ascending: true })
+                .order('confidence', { ascending: false });
+
+            if (dataElementError) {
+                console.error(dataElementError);
+                return;
+            }
+            console.log(dataElementData);
+
+            const dataElements = {};
+            dataElementData.forEach(element => {
+                if (!dataElements[element.field_name]) {
+                    dataElements[element.field_name] = [];
+                }
+                dataElements[element.field_name].push(element);
+            });
+            setClaimDataElements(dataElements);
+            return;
+        }
+
+
         checkClaimAuthorization();
         getClaimDocuments();
+        getClaimDataElements();
     }, [user, claimId]);
 
     const changeAppState = (newState) => {
@@ -108,6 +149,23 @@ export default function ClaimPage({ claimId }) {
     const toggleInputModal = () => {
         setInputModalOpen(!inputModalOpen);
     };
+
+    const headerArray = ['Denial Letters', 'Medical Records', 'Other Docs', 'Data Elements'];
+
+    const elementArray = [
+        claimDocuments?.denialLetters.map(doc => {return {id: doc.document_id, elementName: doc.file_name,};}),
+        claimDocuments?.medicalRecords.map(doc => {return {id: doc.document_id, elementName: doc.file_name,};}),
+        claimDocuments?.otherDocuments.map(doc => {return {id: doc.document_id, elementName: doc.file_name,};}),
+        Object.keys(claimDataElements || {}).map(element => {return {id: element[0].id, elementName: element[0].field_name, additionalFields: [elemment[0].value, element[0].confidence]}}),
+        // claimDataElements?.map(element => {return {id: element[0].id, name: element[0].field_name, additionalFields: {value: element[0].value, confidence: element[0].confidence}};}),
+    ];
+
+    const triggerArray = [
+        {newHandler: () => {console.log(claimDataElements)}, onClickHandler: () => {console.log('click denial letter')}},
+        {newHandler: () => {console.log('new medical record')}, onClickHandler: () => {console.log('click medical record')}},
+        {newHandler: () => {console.log('new other document')}, onClickHandler: () => {console.log('click other document')}},
+        {onClickHandler: () => {console.log('click data element')}},
+    ];
 
     const ArrowLeft = () => (
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-5 w-5 text-gray-900 dark:text-gray-100 mr-[-8px]">
@@ -129,7 +187,7 @@ export default function ClaimPage({ claimId }) {
                 classNames="sidebar"
                 unmountOnExit={true}
             >
-                <Sidebar setAppStage={changeAppState} />
+                <Sidebar headers={headerArray} elements={elementArray} triggers={triggerArray} />
             </CSSTransition>
             <button onClick={toggleSidebar} className="flex justify-start m-1">
                 <div className={`flex bg-gray-100 dark:bg-gray-800 rounded border-2 border-gray-700 dark:border-gray-300 cursor-pointer ${isSidebarVisible ? 'pr-2' : 'pl-2'}`}>
