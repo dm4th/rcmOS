@@ -75,6 +75,7 @@ export const uploadAWS = async (file, resource, uploadCallback) => {
         fileName: file.name,
     });
     const url = JSON.parse(urlRes.data.body).url;
+    console.log(url);
 
     // Upload file to S3 with Pre-Signed URL
     const uploadRes = await axios.put(url, file, {

@@ -1,94 +1,89 @@
 // React imports
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // Component Imports
 import { CSSTransition } from 'react-transition-group';
-import { ClaimInput } from '@/components/claims/ClaimInput';
 import { FileProcessing } from '@/components/FileProcessing';
-import { DenialSummary } from '@/components/claims/DenialSummary';
-import { ClaimRoute } from '@/components/claims/ClaimRoute';
+import { MedicalRecordInput } from '@/components/records/MedicalRecordInput';
+import { RecordRoute } from '@/components/RecordRoute';
 
 // Context Imports
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
 // Library Imports
 import { uploadAWS, textractOCR } from '@/lib/aws';
-import { createDenialLetterSupabase } from '@/lib/supabase';
+import { createMedicalRecordSupabase } from '@/lib/supabase';
 
-export function ClaimInputModal({ onClose }) {
+export function MedicalRecordInputModal({ onClose, claimId, denialSummary }) {
 
-    const { user, updateAvailableClaims, supabaseClient } = useSupaUser();
+    const { user, supabaseClient } = useSupaUser();
 
-    const [modalStage, setModalStage] = useState('claim'); // claim, denialProcessing, denialSummary, closeOut
+    const [modalStage, setModalStage] = useState('input'); // input, processing, route, closeOut
     const [transitioningState, setTransitioningState] = useState(false);
 
     const [progressValues, setProgressValues] = useState(null);
     const [progressTitle, setProgressTitle] = useState('');
 
-    const [claimIdState, setClaimIdState] = useState(null);
+    const [recordIdState, setRecordIdState] = useState(null);
+    const [relevantSectionsCount, setRelevantSectionsCount] = useState(null);
+    const [dataElementsCount, setDataElementsCount] = useState(null);
 
-    const [denialLetterId, setDenialLetterId] = useState(null);
-    const [denialLetterSummary, setDenialLetterSummary] = useState('');
+    useEffect(() => {
+        if (recordIdState) {
+            const fetchRelevanceData = async () => {
+                const { data: relevantSectionsData, error: relevantSectionsError } = await supabaseClient
+                    .from('record_sections')
+                    .select('id')
+                    .eq('record_id', recordIdState);
+                if (relevantSectionsError) {
+                    console.error(relevantSectionsError);
+                }
+                setRelevantSectionsCount(relevantSectionsData.length);
+
+                const { data: dataElementsData, error: dataElementsError } = await supabaseClient
+                    .from('document_data_elements')
+                    .select('id')
+                    .eq('document_id', recordIdState);
+                if (dataElementsError) {
+                    console.error(dataElementsError);
+                }
+                setDataElementsCount(dataElementsData.length);
+            };
+            fetchRelevanceData();
+        }
+    }, [recordIdState]);
 
     const handleNextStage = () => {
         setTransitioningState(true);
         setTimeout(() => {
             setModalStage((prevModalStage) => {
                 switch (prevModalStage) {
-                    case 'claim':
-                        return 'denialProcessing';
-                    case 'denialProcessing':
-                        return 'denialSummary'
-                    case 'denialSummary':
+                    case 'input':
+                        return 'processing';
+                    case 'processing':
+                        return 'route'
+                    case 'route':
                         return 'closeOut'
                     default:
-                        return 'claim'
+                        return 'input'
                 }
             });
             setTransitioningState(false);
         }, 300);
     };
 
-    const handleNewClaim = async (title, selectedDenialLetter, uploadedDenialLetter) => {
+    const handleNewRecord = async (selectedRecord, uploadedRecord) => {
         // Create New Claim
         try {
-            const { data, error } = await supabaseClient
-                .from('claims')
-                .insert([
-                    {
-                        title: title,
-                        status: 'uploading',
-                        user_id: user.id,
-                    },
-                ])
-                .select();
-            if (error) {
-                throw error;
-            } 
 
-            // Update available claims
-            await updateAvailableClaims();
-
-            // Save claimId for later and start to process the new denial letter
-            const claimId = data[0].id;
-
-            // Move to next stage - denial letter processing
+            console.log('New Record');
+            
             handleNextStage();
 
-            // if both selected and uploaded denial letter, upload the uploaded one
-            if (uploadedDenialLetter) await handleDenialLetterUpload(uploadedDenialLetter, claimId);
-            else if (selectedDenialLetter) await handleSelctedDenialLetter(selectedDenialLetter, claimId);
+            // if both selected and uploaded medical record, upload the uploaded one
+            if (uploadedRecord) await handleRecordUpload(uploadedRecord, claimId);
+            else if (selectedRecord) await handleSelctedDenialLetter(selectedRecord, claimId);
             else console.error('No denial letter selected or uploaded');
-
-            // Update claim status to processing and refresh available claims
-            const { error: processingUpdateError } = await supabaseClient
-                .from('claims')
-                .update({ status: 'processing' })
-                .match({'id': claimId})
-            if (processingUpdateError) {
-                throw processingUpdateError;
-            }
-            await updateAvailableClaims();
 
             // Move to next stage - denial letter summary
             handleNextStage();
@@ -97,35 +92,15 @@ export function ClaimInputModal({ onClose }) {
         }
     };
 
-    const handleSummarySubmit = async (summary) => {
-        const { error: documentsError } = await supabaseClient
-            .from('claim_documents')
-            .update({ summary: summary })
-            .match({'claim_id': claimIdState, 'document_id': denialLetterId, 'document_type': 'denial_letter'});
-        if (documentsError) {
-            console.error(documentsError);
-        }
-
-        const { error: claimsError } = await supabaseClient
-            .from('claims')
-            .update({ denial_summary: summary })
-            .eq('id', claimIdState);
-        if (claimsError) {
-            console.error(claimsError);
-        }
-
-        handleNextStage();
-    }
-
-    const handleDenialLetterUpload = async (file, claimId) => {
+    const handleRecordUpload = async (file, claimId) => {
         // Need to implement:
         // 1. Upload file to AWS using the lib function
         setProgressTitle('Processing Denial Letter on AWS');
         setProgressValues([
-            { text: 'Uploading File to AWS', progress: 0},
-            { text: 'Performing OCR on File', progress: 0},
+            { text: 'Securely Uploading Medical Record to AWS', progress: 0},
+            { text: 'Performing OCR on Record', progress: 0},
             { text: 'Extracting Data from OCR Job', progress: 0},
-            { text: 'Generating Denial Summary', progress: 0, textProgress: 0, tableProgress: 0, kvProgress: 0, summaryProgress: 0},
+            { text: 'Searching for Denial Appeal Evidence', progress: 0, textProgress: 0, tableProgress: 0, kvProgress: 0, summaryProgress: 0},
         ]);
         const uploadCallback = (progress) => {
             setProgressValues((prev) => {
@@ -141,14 +116,14 @@ export function ClaimInputModal({ onClose }) {
                 return newProgressValues;
             });
         };
-        const processingCallback = (progress) => {
+        const extractionCallback = (progress) => {
             setProgressValues((prev) => {
                 const newProgressValues = [...prev];
                 newProgressValues[2].progress = progress;
                 return newProgressValues;
             });
         };
-        const summaryCallback = (progress, type) => {
+        const processingCallback = (progress, type) => {
             setProgressValues((prev) => {
                 const newProgressValues = [...prev];
                 switch (type) {
@@ -161,9 +136,6 @@ export function ClaimInputModal({ onClose }) {
                     case 'kv':
                         newProgressValues[3].kvProgress = progress;
                         break;
-                    case 'summary':
-                        newProgressValues[3].summaryProgress = progress;
-                        break;
                     default:
                         break;
                 }
@@ -173,31 +145,29 @@ export function ClaimInputModal({ onClose }) {
         };
 
         // Upload the file to AWS and Kick Off Processing
-        // const { jobId, jobType, jobOutput } = await uploadAWS(file, 'letter', uploadCallback);
-        // const { jobId } = await uploadAWS(file, 'letter', uploadCallback);
-        // console.log(jobId);
-        const jobId = '0dad206b21ad262a52ddde2a767cb53018a63962526d3f40c1bfa19363f614a3';
+        // const { jobId } = await uploadAWS(file, 'record', uploadCallback);
+        // console.log(`Textract ID for Medical Record:\t ${jobId}`);
+        const jobId = '87692eab8db984de62ec614641675ff2ca00f8847c71db1bf6665aec65a11d1f';
         uploadCallback(100);
 
         // Perform OCR on the File using Textract
-        const { textBlocks, tableBlocks, kvBlocks } = await textractOCR(jobId, pollingCallback, processingCallback);
+        const { textBlocks, tableBlocks, kvBlocks } = await textractOCR(jobId, pollingCallback, extractionCallback);
 
         // Parse and Summarize OCR data
-        const { denialLetterId, denialLetterSummary } = await createDenialLetterSupabase(
+        const { medicalRecordId, denialLetterSummary } = await createMedicalRecordSupabase(
             file, 
             claimId,
             jobId,
+            denialSummary,
             textBlocks, 
             tableBlocks, 
             kvBlocks, 
             user, 
             supabaseClient, 
-            summaryCallback
+            processingCallback
         );
 
-        setDenialLetterId(denialLetterId);
-        setDenialLetterSummary(denialLetterSummary);
-        setClaimIdState(claimId);
+        setRecordIdState(medicalRecordId);
     };
 
     const handleSelctedDenialLetter = async (denialLetterId, claimId) => {
@@ -264,15 +234,15 @@ export function ClaimInputModal({ onClose }) {
                     X
                 </button>
                 <CSSTransition
-                    in={modalStage === 'claim' && !transitioningState}
+                    in={modalStage === 'input' && !transitioningState}
                     timeout={300}
                     classNames="fade"
                     unmountOnExit={true}
                 >
-                    <ClaimInput handleSubmit={handleNewClaim} />
+                    <MedicalRecordInput handleSubmit={handleNewRecord} />
                 </CSSTransition>
                 <CSSTransition
-                    in={modalStage === 'denialProcessing' && !transitioningState}
+                    in={modalStage === 'processing' && !transitioningState}
                     timeout={300}
                     classNames="fade"
                     unmountOnExit={true}
@@ -280,20 +250,12 @@ export function ClaimInputModal({ onClose }) {
                     <FileProcessing progressTitle={progressTitle} progressValues={progressValues} />
                 </CSSTransition>
                 <CSSTransition
-                    in={modalStage === 'denialSummary' && !transitioningState}
+                    in={modalStage === 'route' && !transitioningState}
                     timeout={300}
                     classNames="fade"
                     unmountOnExit={true}
                 >
-                    <DenialSummary summary={denialLetterSummary} letterId={denialLetterId} handleSubmit={handleSummarySubmit}  />
-                </CSSTransition>
-                <CSSTransition
-                    in={modalStage === 'closeOut' && !transitioningState}
-                    timeout={300}
-                    classNames="fade"
-                    unmountOnExit={true}
-                >
-                    <ClaimRoute claimId={claimIdState} onClose={onClose}  />
+                    <RecordRoute claimId={claimId} documentId={recordIdState} documentType={'Medical Record'} onClose={onClose} />
                 </CSSTransition>
             </div>
         </div>

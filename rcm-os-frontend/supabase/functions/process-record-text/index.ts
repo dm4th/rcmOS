@@ -2,7 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
 import { textMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
-import { textSectionTemplate } from '../_shared/letterSummaryTemplates.ts';
+import { textSectionTemplate } from '../_shared/recordProcessingTemplates.ts';
 import { commonDataElementsMarkdown } from '../_shared/dataElements.ts';
 import { z } from "https://esm.sh/zod";
 import { ChatOpenAI } from "https://esm.sh/langchain/chat_models/openai";
@@ -23,7 +23,7 @@ async function handler(req: Request) {
     } 
 
     try {
-        const { pageData, letterId } = await req.json();
+        const { pageData, claimId, recordId, summary } = await req.json();
 
         // First pull the page number from the pageData first element
         const pageNumber = pageData[0].page;
@@ -51,7 +51,7 @@ async function handler(req: Request) {
         const pageMarkdownArray = textMarkdownTableGenerator(markdownHeaders, markdownArray);
 
         // Commond data elements markdown table
-        const { dataElementsTable, dataElementsMarkdown } = await commonDataElementsMarkdown(["denial_letter", "all"]);
+        const { dataElementsTable, dataElementsMarkdown } = await commonDataElementsMarkdown(["medical_record", "all"]);
 
         // Create a new model instance
         const model = new ChatOpenAI({
@@ -64,10 +64,10 @@ async function handler(req: Request) {
 
         // Create Zod schema for LangChain Function
         const outputSchema = z.object({
-            title: z.string().describe('Your generated title for this section of text. Keep it short and as descriptive as possible.'),
+            title: z.string().describe('Your generated title describing this section of text. Keep it short and as descriptive as possible.'),
             summary: z.string().describe('Your generated summary of the section of text. Be as descriptive as possible.'),
-            relevant: z.boolean().describe('Only true if the section of text is relevant to the MEDICAL reason for the claim denial. Defer to false if not 100% certain of the medical reasoning. The reason must be medical and not administrative.'),
-            reason: z.string().describe('A summary of the MEDICAL reason for the claim denial (or just "None" if the section of text is not relevant to the medical reason for the claim denial)'),
+            analysis: z.string().describe('Your expert analysis as a Medical Documentation Specialist regarding this section of text and whether or not it is valuable to generating a successful insurance claim denial.'),
+            relevance: z.number().min(0).max(1).describe("A number between 0 and 1 representing how important this section of text and your accompanying analysis is to generating a successful insurance claim denial."),
             elements: z.array(z.object({
                 id: z.string().describe('The ID of the data element you have found a value for in the processed text.'),
                 field: z.string().describe('The field of the data element matching the text in the field column of the common data elements table. Any data that you believe matches a common data element should be included in the output.'),
@@ -120,6 +120,7 @@ async function handler(req: Request) {
             sectionPromises.push(llmChain.call({
                 pageNumber: pageNumber,
                 sectionNumber: i,
+                reasonForDenial: summary,
                 markdownTable: pageMarkdownArray[i].text,
                 dataElementsTable: dataElementsMarkdown,
             }));
@@ -137,8 +138,8 @@ async function handler(req: Request) {
             console.log(sectionResults[i]);
             const title = sectionResults[i].text.title;
             const summary = sectionResults[i].text.summary;
-            const relevant = sectionResults[i].text.relevant;
-            const reason = sectionResults[i].text.reason;
+            const relevance = sectionResults[i].text.relevance;
+            const analysis = sectionResults[i].text.analysis;
             const elements = sectionResults[i].text.elements;
 
             const summaryEmbeddingBody = JSON.stringify({
@@ -168,8 +169,8 @@ async function handler(req: Request) {
             }
 
             citationInputRows.push({
-                "document_type": "denial_letter",
-                "document_id": letterId,
+                "document_type": "medical_record",
+                "document_id": recordId,
                 "page_number": pageNumber,
                 "section_type": "text",
                 "section_number": i,
@@ -182,27 +183,27 @@ async function handler(req: Request) {
                 "bottom": pageMarkdownArray[i].bottom,
             });
 
-            if (relevant) {
+            if (relevance && relevance > 0) {
 
-                const reasonEmbeddingBody = JSON.stringify({
-                    "input": reason,
+                const analysisEmbeddingBody = JSON.stringify({
+                    "input": analysis,
                     "model": "text-embedding-ada-002",
                 });
 
                 // loop until the embedding is generated
                 // if embeddingJson.data is undefined, then the embedding is not ready
-                let reasonCalculateEmbedding = true;
-                let reasonEmbedding;
-                while (reasonCalculateEmbedding) {
+                let analysisCalculateEmbedding = true;
+                let analysisEmbedding;
+                while (analysisCalculateEmbedding) {
                     const embeddingResponse = await fetch(embeddingUrl, {
                         method: "POST",
                         headers: embeddingHeaders,
-                        body: reasonEmbeddingBody
+                        body: analysisEmbeddingBody
                     });
                     const embeddingJson = await embeddingResponse.json();
                     if (embeddingJson.data) {
-                        reasonEmbedding = embeddingJson.data[0].embedding;
-                        reasonCalculateEmbedding = false;
+                        analysisEmbedding = embeddingJson.data[0].embedding;
+                        analysisCalculateEmbedding = false;
                     } else {
                         console.log("Embedding not ready yet, waiting 1 second...");
                         console.log(embeddingResponse.status, embeddingResponse.statusText);
@@ -211,12 +212,14 @@ async function handler(req: Request) {
                 }
 
                 summaryInsertRows.push({
-                    "letter_id": letterId,
+                    "claim_id": claimId,
+                    "record_id": recordId,
                     "page_number": pageNumber,
                     "section_type": "text",
                     "section_number": i,
-                    "reason": reason,
-                    "section_embedding": reasonEmbedding,
+                    "relevance": relevance,
+                    "analysis": analysis,
+                    "analysis_embedding": analysisEmbedding,
                     "left": pageMarkdownArray[i].left,
                     "top": pageMarkdownArray[i].top,
                     "right": pageMarkdownArray[i].right,
@@ -227,8 +230,8 @@ async function handler(req: Request) {
             if (elements) {
                 for (let e = 0; e < elements.length; e++) {
                     dataElementInsertRows.push({
-                        "document_type": "denial_letter",
-                        "document_id": letterId,
+                        "document_type": "medical_record",
+                        "document_id": recordId,
                         "page_number": pageNumber,
                         "section_type": "text",
                         "section_number": i,
@@ -262,7 +265,7 @@ async function handler(req: Request) {
 
         // Write the page summaries to the database
         const { data: summaryData, error: summaryError } = await supabaseClient
-            .from("letter_sections")
+            .from("record_sections")
             .insert(summaryInsertRows)
             .select();
         if (summaryError) {

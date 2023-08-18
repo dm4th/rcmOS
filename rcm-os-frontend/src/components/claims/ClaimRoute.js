@@ -3,7 +3,7 @@ import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
 export function ClaimRoute({ claimId, onClose }) {
 
-    const { user, updateAvailableClaims, supabaseClient } = useSupaUser();
+    const { updateAvailableClaims, supabaseClient } = useSupaUser();
     const router = useRouter();
 
     const changeClaimStatus = async () => {

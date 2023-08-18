@@ -295,6 +295,185 @@ const summarizeLetterForms = async (blocks, letterId, supabaseClient, summaryCal
     }
 
 };
+
+
+export const createMedicalRecordSupabase = async (
+    file, 
+    claimId,
+    processingId,
+    denialSummary,
+    textBlocks, 
+    tableBlocks, 
+    kvBlocks, 
+    user, 
+    supabaseClient, 
+    processingCallback
+) => {
+    // start by uploading the file to supabase storage
+    // then create a new record in the denial_letters table
+    // then send the data blocks to the summarize-<datatype> edge function
+    // and finally use the summarize-letter edge function to summarize what the denial reason is
+
+    // upload file to supabase storage
+    const fileName = file.name;
+    const fileUrl = `${user.id}/${fileName}`;
+    const { error: uploadError } = await supabaseClient.storage
+        .from('records')
+        .upload(fileUrl, file);
+    if (uploadError) {
+        if (uploadError.statusCode === '409') {
+            console.log('File already exists in storage');
+        }
+        else {
+            console.error(uploadError);
+            return;
+        }
+    }
+
+    // create new record in denial_letters table
+    const { data: insertData, error: insertError } = await supabaseClient
+        .from('medical_records')
+        .insert([{
+            user_id: user.id,
+            file_name: fileName,
+            file_url: fileUrl,
+            content_processing_progress: 0,
+            content_processing_type: 'Textract',
+            content_processing_id: processingId ? processingId : null,
+            text_processing_progress: 0,
+            table_processing_progress: 0,
+            kv_processing_progress: 0,
+        }])
+        .select();
+    if (insertError) {
+        console.error(insertError);
+        return;
+    }
+    const medicalRecordId = insertData[0].id;
+
+    // create new linking record in claim_documents table
+    const { error: claimDocError } = await supabaseClient
+        .from('claim_documents')
+        .insert([{
+            claim_id: claimId,
+            document_id: medicalRecordId,
+            document_type: 'medical_record',
+            user_id: user.id,
+        }]);
+    if (claimDocError) {
+        console.error(claimDocError);
+        return;
+    };
+
+    // send data blocks to summarize-<datatype> edge function
+    const summaryCallbackWithSupabase = async (processingProgress, processType) => {
+        processingCallback(processingProgress, processType);
+        const { error: updateError } = await supabaseClient
+            .rpc('record_progress', {progress: processingProgress, record_id: medicalRecordId, data_type: processType});
+        if (updateError) {
+            console.error(updateError);
+        }
+    };
+
+    await Promise.allSettled([
+        processRecordText(textBlocks, claimId, medicalRecordId, denialSummary, supabaseClient, summaryCallbackWithSupabase),
+        processRecordTables(textBlocks, claimId, medicalRecordId, denialSummary, supabaseClient, summaryCallbackWithSupabase),
+        processRecordForms(textBlocks, claimId, medicalRecordId, denialSummary, supabaseClient, summaryCallbackWithSupabase),
+    ]).then((results) => {
+        const textResponse = results[0];
+        const tableResponse = results[1];
+        const kvResponse = results[2];
+
+        if (textResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'text');
+        }
+
+        if (tableResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'table');
+        }
+
+        if (kvResponse.status === 'fulfilled') {
+            summaryCallbackWithSupabase(100, 'kv');
+        }
+    });
+
+    // Return the medical record ID
+    return { denialLetterId, denialLetterSummary: denialLetterSummaryData.data.summary };
+};
+
+const processRecordText = async (blocks, claimId, recordId, summary, supabaseClient, summaryCallback) => {
+
+    const totalPages = blocks[blocks.length - 1][0].Page;
+    for (const pageData of blocks) {
+        if (pageData.length === 0) {
+            continue;
+        }
+        const currentPage = pageData[0].Page;
+        console.log(`Processing Medical Record Text page ${currentPage}`);
+
+        const preProcessedPageData = pageData.map((block) => {
+            if (block.BlockType === 'PAGE') {
+                return {
+                    blockType: block.BlockType,
+                    page: block.Page,
+                };
+            }
+            return {
+                blockType: block.BlockType,
+                confidence: block.Confidence,
+                text: block.Text,
+                left: block.Geometry.BoundingBox.Left,
+                top: block.Geometry.BoundingBox.Top,
+                width: block.Geometry.BoundingBox.Width,
+                height: block.Geometry.BoundingBox.Height,
+                page: block.Page,
+            };
+        });
+
+        // Send page data and page id to Supabase Edge Function
+        const requestBody = {
+            pageData: preProcessedPageData,
+            claimId,
+            recordId,
+            summary,
+        };
+
+        // Step into loop where there is a 3 second wait after a 504 error in case the server takes too long to respond
+        let running = true;
+        while (running) {
+            try {
+                await supabaseClient.functions.invoke('process-record-text', {
+                    body: JSON.stringify(requestBody),
+                });
+                running = false;
+            }
+            catch (error) {
+                if (error.statusCode === 504) {
+                    console.log('Timeout Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                    console.log('Network Error - Retrying in 3 seconds');
+                    await new Promise((resolve) => setTimeout(resolve, 3000));
+                }
+                else {
+                    console.error(error);
+                    return;
+                }
+            }
+        }
+        const progress = Math.floor((currentPage / totalPages) * 100);
+        summaryCallback(progress, "text");
+    }
+};
+
+const processRecordTable = async (blocks, claimId, recordId, summary, supabaseClient, summaryCallback) => {
+    summaryCallback(progress, "table");
+};
+
+const processRecordForms = async (blocks, claimId, recordId, summary, supabaseClient, summaryCallback) => {
+    summaryCallback(progress, "kv");
+};
     
 
 

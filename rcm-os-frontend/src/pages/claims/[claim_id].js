@@ -4,11 +4,9 @@ import { useRouter } from 'next/router';
 
 import { CSSTransition } from 'react-transition-group';
 
-import { Intro } from '@/components/Intro';
-import { Processing } from '@/components/Processing';
-import { Sidebar } from '@/components/Sidebar';
-import { ChatInterface } from '@/components/ChatInterface';
-import { InputTemplateModal } from '@/components/InputTemplateModal';
+// Components
+import { Sidebar } from '@/components/Sidebar'
+import { MedicalRecordInputModal } from '@/components/MedicalRecordInputModal';
 
 import { useSupaUser } from '@/contexts/SupaAuthProvider';
 
@@ -27,15 +25,14 @@ export default function ClaimPage({ claimId }) {
     const { user, supabaseClient } = useSupaUser();
 
     // UI State Variables
-    const [appStage, setAppStage] = useState('base'); // ['base', 'uploading', 'processing', 'generating'
+    const [appStage, setAppStage] = useState('base'); // ['base', 'medical_record', 'denial_letter', 'other_document']
     const [transitioningState, setTransitioningState] = useState(false);
     const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-    const [inputModalOpen, setInputModalOpen] = useState(false);
 
     // Claim State Variables
     const [claimTitle, setClaimTitle] = useState(null);
     const [claimStatus, setClaimStatus] = useState(null);
-    const [claimSummary, setClaimSummary] = useState(null);
+    const [claimDenialSummary, setClaimDenialSummary] = useState(null);
     const [claimDocuments, setClaimDocuments] = useState(null);
     const [claimDataElements, setClaimDataElements] = useState(null);
 
@@ -44,8 +41,6 @@ export default function ClaimPage({ claimId }) {
     const [progressTitle, setProgressTitle] = useState('');
 
     useEffect(() => {
-        console.log(`Claim ID: ${claimId}`);
-
         async function checkClaimAuthorization() {
             if (!claimId) return;
             if (!user) {
@@ -86,7 +81,7 @@ export default function ClaimPage({ claimId }) {
                 otherDocuments: data.filter(doc => doc.document_type === 'other_document'),
             }
             setClaimDocuments(documents);
-            setClaimSummary(documents.denialLetters[0].summary);
+            setClaimDenialSummary(documents.denialLetters[0].summary);
             return;
         }
 
@@ -146,8 +141,12 @@ export default function ClaimPage({ claimId }) {
         setIsSidebarVisible(!isSidebarVisible);
     };
 
-    const toggleInputModal = () => {
-        setInputModalOpen(!inputModalOpen);
+    const newRecordHandler = () => {
+        changeAppState('medical_record');
+    };
+
+    const closeInputModal = () => {
+        changeAppState('base');
     };
 
     const headerArray = ['Denial Letters', 'Medical Records', 'Other Docs', 'Data Elements'];
@@ -161,8 +160,8 @@ export default function ClaimPage({ claimId }) {
     ];
 
     const triggerArray = [
-        {newHandler: () => {console.log(claimDataElements)}, onClickHandler: () => {console.log('click denial letter')}},
-        {newHandler: () => {console.log('new medical record')}, onClickHandler: () => {console.log('click medical record')}},
+        {newHandler: () => {console.log('new denial letter')}, onClickHandler: () => {console.log('click denial letter')}},
+        {newHandler: newRecordHandler, onClickHandler: () => {console.log('click medical record')}},
         {newHandler: () => {console.log('new other document')}, onClickHandler: () => {console.log('click other document')}},
         {onClickHandler: () => {console.log('click data element')}},
     ];
@@ -195,20 +194,28 @@ export default function ClaimPage({ claimId }) {
                 </div>
             </button>
             <main className="flex flex-col items-center justify-center w-9/12 flex-1 text-center overflow-auto">
-                    <CSSTransition
-                        in={appStage === 'base' && !transitioningState}
-                        timeout={300}
-                        classNames="fade"
-                        unmountOnExit={true}
-                    >
-                        <div className="flex flex-col items-center justify-center w-full h-full">
-                            <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">{claimTitle}</h1>
-                            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">Status: {claimStatus}</p>
-                            <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">Denial Summary: {claimSummary}</p>
-                        </div>
-                    </CSSTransition>
+                <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">{claimTitle}</h1>
+                <div className="flex flex-row items-center justify-between w-full">
+                    <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">Status: {claimStatus}</p>
+                    <p className="text-xl text-gray-700 dark:text-gray-300 mb-4">Denial Summary: {claimDenialSummary}</p>
+                </div>
+                <CSSTransition
+                    in={appStage === 'base' && !transitioningState}
+                    timeout={300}
+                    classNames="fade"
+                    unmountOnExit={true}
+                >
+                    <p className="text-xl italic text-red-700 dark:text-red-300 mb-4">Base View (In Development)</p>
+                </CSSTransition>
             </main>
-            {inputModalOpen && <InputTemplateModal onClose={toggleInputModal} onTemplateSelect={handleInputTemplateSelect} />}
+            <CSSTransition
+                in={appStage === 'medical_record' && !transitioningState}
+                timeout={300}
+                classNames="fade"
+                unmountOnExit={true}
+            >
+                <MedicalRecordInputModal onClose={closeInputModal} claimId={claimId} denialSummary={claimDenialSummary} />
+            </CSSTransition>
         </div>
     )
 }
