@@ -145,9 +145,9 @@ export function MedicalRecordInputModal({ onClose, claimId, denialSummary }) {
         };
 
         // Upload the file to AWS and Kick Off Processing
-        // const { jobId } = await uploadAWS(file, 'record', uploadCallback);
-        // console.log(`Textract ID for Medical Record:\t ${jobId}`);
-        const jobId = '87692eab8db984de62ec614641675ff2ca00f8847c71db1bf6665aec65a11d1f';
+        const { jobId } = await uploadAWS(file, 'record', uploadCallback);
+        console.log(`Textract ID for Medical Record:\t ${jobId}`);
+        // const jobId = '87692eab8db984de62ec614641675ff2ca00f8847c71db1bf6665aec65a11d1f';
         uploadCallback(100);
 
         // Perform OCR on the File using Textract

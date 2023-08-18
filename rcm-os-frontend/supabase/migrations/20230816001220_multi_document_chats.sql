@@ -1,14 +1,23 @@
+-- Add primary key to claim_documents table
+ALTER TABLE "public"."claim_documents"
+  ADD COLUMN "id" "uuid" DEFAULT "gen_random_uuid"() NOT NULL;
+
+ALTER TABLE "public"."claim_documents"
+  ADD CONSTRAINT "claim_documents_pkey" PRIMARY KEY ("id");
+
+-- Alter page summaries table to include multiple doc types
 ALTER TABLE "public"."page_summaries"
-ADD COLUMN "document_type" text NOT NULL;
+  ADD COLUMN "document_type" text NOT NULL;
 
 ALTER TABLE "public"."page_summaries"
-DROP CONSTRAINT "page_summaries_record_id_fkey";
+  DROP CONSTRAINT "page_summaries_record_id_fkey";
 
 ALTER TABLE "public"."page_summaries"
-RENAME COLUMN "record_id" TO "document_id";
+  RENAME COLUMN "record_id" TO "document_id";
 
+-- Add claim-level denial summary
 ALTER TABLE "public"."claims"
-ADD COLUMN "summary" text DEFAULT ''::text NOT NULL;
+  ADD COLUMN "summary" text DEFAULT ''::text NOT NULL;
 
 -- Alter the medical_records table and associated objects to look more like the denial_letters table
 ALTER TABLE "public"."medical_records"
