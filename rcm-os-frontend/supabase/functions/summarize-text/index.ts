@@ -59,7 +59,7 @@ async function handler(req: Request) {
             temperature: 0,
             frequencyPenalty: 0,
             presencePenalty: 0,
-            modelName: "gpt-3.5-turbo",
+            modelName: "gpt-3.5-turbo-16k",
         });
 
         // Create Zod schema for LangChain Function
@@ -109,12 +109,12 @@ async function handler(req: Request) {
         const sectionPromises = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
             // log the final prompt to the LLM in the console
-            // console.log(await prompt.format({
-            //     pageNumber: pageNumber,
-            //     sectionNumber: i,
-            //     markdownTable: pageMarkdownArray[i].text,
-            //     dataElementsTable: dataElementsMarkdown
-            // }));
+            console.log(await prompt.format({
+                pageNumber: pageNumber,
+                sectionNumber: i,
+                markdownTable: pageMarkdownArray[i].text,
+                dataElementsTable: dataElementsMarkdown
+            }));
 
             // Run the LLM Chain
             sectionPromises.push(llmChain.call({

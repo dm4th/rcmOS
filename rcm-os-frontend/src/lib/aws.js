@@ -128,7 +128,7 @@ const pollJobAWS = async (jobId, pollingCallback) => {
     while (jobStatus === 'IN_PROGRESS') {
         // poll every 0.5 seconds
         await new Promise((resolve) => {
-            setTimeout(resolve, 2000);
+            setTimeout(resolve, 250);
         });
 
         statusRes = await axios.post(process.env.NEXT_PUBLIC_AWS_PROCESS_FUNCTION_URL, {

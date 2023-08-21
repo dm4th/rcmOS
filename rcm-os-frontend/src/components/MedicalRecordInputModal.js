@@ -95,12 +95,12 @@ export function MedicalRecordInputModal({ onClose, claimId, denialSummary }) {
     const handleRecordUpload = async (file, claimId) => {
         // Need to implement:
         // 1. Upload file to AWS using the lib function
-        setProgressTitle('Processing Denial Letter on AWS');
+        setProgressTitle('Processing Medical Record on AWS');
         setProgressValues([
-            { text: 'Securely Uploading Medical Record to AWS', progress: 0},
+            { text: 'Securely Uploading Record to AWS', progress: 0},
             { text: 'Performing OCR on Record', progress: 0},
             { text: 'Extracting Data from OCR Job', progress: 0},
-            { text: 'Searching for Denial Appeal Evidence', progress: 0, textProgress: 0, tableProgress: 0, kvProgress: 0, summaryProgress: 0},
+            { text: 'Searching for Appeal Evidence', progress: 0, textProgress: 0, tableProgress: 0, kvProgress: 0, summaryProgress: 0},
         ]);
         const uploadCallback = (progress) => {
             setProgressValues((prev) => {
@@ -145,9 +145,9 @@ export function MedicalRecordInputModal({ onClose, claimId, denialSummary }) {
         };
 
         // Upload the file to AWS and Kick Off Processing
-        const { jobId } = await uploadAWS(file, 'record', uploadCallback);
-        console.log(`Textract ID for Medical Record:\t ${jobId}`);
-        // const jobId = '87692eab8db984de62ec614641675ff2ca00f8847c71db1bf6665aec65a11d1f';
+        // const { jobId } = await uploadAWS(file, 'record', uploadCallback);
+        // console.log(`Textract ID for Medical Record:\t ${jobId}`);
+        const jobId = '87692eab8db984de62ec614641675ff2ca00f8847c71db1bf6665aec65a11d1f';
         uploadCallback(100);
 
         // Perform OCR on the File using Textract

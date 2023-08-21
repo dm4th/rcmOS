@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient } from '../_shared/supabaseClient.ts';
+import GPT3Tokenizer from 'https://esm.sh/gpt3-tokenizer';
 import { textMarkdownTableGenerator } from '../_shared/promptTemplates.ts';
 import { textSectionTemplate } from '../_shared/recordProcessingTemplates.ts';
 import { commonDataElementsMarkdown } from '../_shared/dataElements.ts';
@@ -59,7 +60,7 @@ async function handler(req: Request) {
             temperature: 0,
             frequencyPenalty: 0,
             presencePenalty: 0,
-            modelName: "gpt-3.5-turbo",
+            modelName: "gpt-3.5-turbo-16k",
         });
 
         // Create Zod schema for LangChain Function
@@ -105,16 +106,25 @@ async function handler(req: Request) {
             "Authorization": `Bearer ${openai_api_key}`
         };
 
+        const gpt3Tokenizer = new GPT3Tokenizer({ type: 'gpt3' });
+
         // Create async promises to summarize the page markdown using the LLM
         const sectionPromises = [];
         for (let i = 0; i < pageMarkdownArray.length; i++) {
             // log the final prompt to the LLM in the console
-            // console.log(await prompt.format({
-            //     pageNumber: pageNumber,
-            //     sectionNumber: i,
-            //     markdownTable: pageMarkdownArray[i].text,
-            //     dataElementsTable: dataElementsMarkdown
-            // }));
+            const fullPrompt = await prompt.format({
+                pageNumber: pageNumber,
+                sectionNumber: i,
+                reasonForDenial: summary,
+                markdownTable: pageMarkdownArray[i].text,
+                dataElementsTable: dataElementsMarkdown
+            });
+            const promptTokens = gpt3Tokenizer.encode(fullPrompt).length;
+
+            console.log(fullPrompt);
+            console.log(`\n\n`);
+            console.log(promptTokens);
+            console.log(`\n\n`);
 
             // Run the LLM Chain
             sectionPromises.push(llmChain.call({
@@ -262,6 +272,8 @@ async function handler(req: Request) {
         if (citationError) {
             throw new Error(citationError.message);
         }
+
+        console.log(summaryInsertRows);
 
         // Write the page summaries to the database
         const { data: summaryData, error: summaryError } = await supabaseClient

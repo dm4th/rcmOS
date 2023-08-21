@@ -41,7 +41,7 @@ async function handler(req: Request) {
             temperature: 0,
             frequencyPenalty: 0,
             presencePenalty: 0,
-            modelName: "gpt-3.5-turbo",
+            modelName: "gpt-3.5-turbo-16k",
         });
 
         // Create Zod schema for LangChain Function
@@ -167,7 +167,7 @@ async function handler(req: Request) {
                     "document_type": "denial_letter",
                     "document_id": letterId,
                     "page_number": pageNumber,
-                    "section_type": "text",
+                    "section_type": "table",
                     "section_number": i,
                     "title": title,
                     "summary": summary,

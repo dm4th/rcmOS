@@ -42,7 +42,7 @@ async function handler(req: Request) {
             temperature: 0.1,
             frequencyPenalty: 0,
             presencePenalty: 0,
-            modelName: "gpt-3.5-turbo",
+            modelName: "gpt-3.5-turbo-16k",
         });
         const llmChain = new LLMChain({
             llm: model,
